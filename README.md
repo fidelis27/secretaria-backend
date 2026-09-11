@@ -23,5 +23,6 @@ go run ./cmd/server
 ## Configuracao
 
 O servidor le `PORT`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
-`DB_PASSWORD` e `DB_TLS`. A conexao com MariaDB sera adicionada na proxima
-fatia; por enquanto, o modulo expoe apenas o endpoint `GET /health`.
+`DB_PASSWORD` e `DB_TLS`. A inicializacao abre a conexao MariaDB e valida o
+banco com `PingContext`. O endpoint `GET /health` retorna `200` quando o banco
+esta disponivel e `503` quando a verificacao falha.

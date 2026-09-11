@@ -13,9 +13,13 @@ type Server struct {
 
 func New(addr string, healthService health.Service) *Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(writer).Encode(healthService.Check())
+		status := healthService.Check(request.Context())
+		if !status.OK {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+		}
+		_ = json.NewEncoder(writer).Encode(status)
 	})
 
 	return &Server{
