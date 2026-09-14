@@ -7,6 +7,7 @@ import (
 	"github.com/karol/secretaria-escolar-backend/internal/adapters/httpserver"
 	"github.com/karol/secretaria-escolar-backend/internal/adapters/mariadb"
 	"github.com/karol/secretaria-escolar-backend/internal/application/health"
+	applicationenrollment "github.com/karol/secretaria-escolar-backend/internal/application/enrollment"
 	applicationinstitution "github.com/karol/secretaria-escolar-backend/internal/application/institution"
 	applicationstudent "github.com/karol/secretaria-escolar-backend/internal/application/student"
 	applicationuser "github.com/karol/secretaria-escolar-backend/internal/application/user"
@@ -31,7 +32,9 @@ func main() {
 	userService := applicationuser.NewService(userRepository)
 	studentRepository := mariadb.NewStudentRepository(database)
 	studentService := applicationstudent.NewService(studentRepository)
-	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService)
+	enrollmentRepository := mariadb.NewEnrollmentRepository(database)
+	enrollmentService := applicationenrollment.NewService(enrollmentRepository)
+	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService)
 	log.Printf("server listening on %s", address)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
