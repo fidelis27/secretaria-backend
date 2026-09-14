@@ -17,6 +17,30 @@ CREATE TABLE users (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE students (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    institution_id VARCHAR(64) NOT NULL,
+    status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_students_institution FOREIGN KEY (institution_id)
+        REFERENCES institutions (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE enrollments (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    student_id VARCHAR(64) NOT NULL,
+    institution_id VARCHAR(64) NOT NULL,
+    status ENUM('active', 'inactive', 'transferred', 'suspended', 'closed') NOT NULL DEFAULT 'active',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_enrollments_student FOREIGN KEY (student_id)
+        REFERENCES students (id),
+    CONSTRAINT fk_enrollments_institution FOREIGN KEY (institution_id)
+        REFERENCES institutions (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE groups (
     id VARCHAR(64) NOT NULL PRIMARY KEY,
     institution_id VARCHAR(64) NOT NULL,
