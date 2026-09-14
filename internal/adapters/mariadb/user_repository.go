@@ -2,6 +2,7 @@ package mariadb
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	domainuser "github.com/fidelis27/secretaria-backend/internal/domain/user"
@@ -47,4 +48,18 @@ func (repository UserRepository) List(ctx context.Context) ([]domainuser.User, e
 		return nil, fmt.Errorf("iterate users: %w", err)
 	}
 	return result, nil
+}
+
+func (repository UserRepository) FindByID(ctx context.Context, id string) (domainuser.User, bool, error) {
+	var entity domainuser.User
+	err := repository.connection.database.QueryRowContext(ctx,
+		`SELECT id, name, email, status, super_admin FROM users WHERE id = ?`, id,
+	).Scan(&entity.ID, &entity.Name, &entity.Email, &entity.Status, &entity.SuperAdmin)
+	if err == sql.ErrNoRows {
+		return domainuser.User{}, false, nil
+	}
+	if err != nil {
+		return domainuser.User{}, false, fmt.Errorf("find user by id: %w", err)
+	}
+	return entity, true, nil
 }

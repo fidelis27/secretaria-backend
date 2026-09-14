@@ -32,6 +32,10 @@ func (service Service) List(ctx context.Context) ([]domainuser.User, error) {
 	return service.repository.List(ctx)
 }
 
+func (service Service) FindByID(ctx context.Context, id string) (domainuser.User, bool, error) {
+	return service.repository.FindByID(ctx, id)
+}
+
 func newID() string {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {

@@ -216,7 +216,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 	return &Server{
 		httpServer: &http.Server{
 			Addr:    addr,
-			Handler: mux,
+			Handler: identityMiddleware(mux, userService),
 		},
 	}
 }
