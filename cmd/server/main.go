@@ -7,6 +7,7 @@ import (
 	"github.com/karol/secretaria-escolar-backend/internal/adapters/httpserver"
 	"github.com/karol/secretaria-escolar-backend/internal/adapters/mariadb"
 	"github.com/karol/secretaria-escolar-backend/internal/application/health"
+	applicationinstitution "github.com/karol/secretaria-escolar-backend/internal/application/institution"
 	"github.com/karol/secretaria-escolar-backend/internal/platform/config"
 )
 
@@ -22,7 +23,9 @@ func main() {
 	defer database.Close()
 
 	address := fmt.Sprintf("0.0.0.0:%d", appConfig.Port)
-	server := httpserver.New(address, health.NewService(database))
+	institutionRepository := mariadb.NewInstitutionRepository(database)
+	institutionService := applicationinstitution.NewService(institutionRepository)
+	server := httpserver.New(address, health.NewService(database), institutionService)
 	log.Printf("server listening on %s", address)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
