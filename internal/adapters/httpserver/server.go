@@ -5,15 +5,15 @@ import (
 	"errors"
 	"net/http"
 
-	applicationenrollment "github.com/karol/secretaria-escolar-backend/internal/application/enrollment"
-	"github.com/karol/secretaria-escolar-backend/internal/application/health"
-	applicationinstitution "github.com/karol/secretaria-escolar-backend/internal/application/institution"
-	applicationstudent "github.com/karol/secretaria-escolar-backend/internal/application/student"
-	applicationuser "github.com/karol/secretaria-escolar-backend/internal/application/user"
-	domainenrollment "github.com/karol/secretaria-escolar-backend/internal/domain/enrollment"
-	domaininstitution "github.com/karol/secretaria-escolar-backend/internal/domain/institution"
-	domainstudent "github.com/karol/secretaria-escolar-backend/internal/domain/student"
-	domainuser "github.com/karol/secretaria-escolar-backend/internal/domain/user"
+	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
+	"github.com/fidelis27/secretaria-backend/internal/application/health"
+	applicationinstitution "github.com/fidelis27/secretaria-backend/internal/application/institution"
+	applicationstudent "github.com/fidelis27/secretaria-backend/internal/application/student"
+	applicationuser "github.com/fidelis27/secretaria-backend/internal/application/user"
+	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
+	domaininstitution "github.com/fidelis27/secretaria-backend/internal/domain/institution"
+	domainstudent "github.com/fidelis27/secretaria-backend/internal/domain/student"
+	domainuser "github.com/fidelis27/secretaria-backend/internal/domain/user"
 )
 
 type Server struct {

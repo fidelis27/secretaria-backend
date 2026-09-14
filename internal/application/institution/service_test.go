@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/karol/secretaria-escolar-backend/internal/domain/institution"
+	"github.com/fidelis27/secretaria-backend/internal/domain/institution"
 )
 
 type repositoryStub struct {

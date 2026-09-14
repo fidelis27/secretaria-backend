@@ -8,7 +8,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/karol/secretaria-escolar-backend/internal/platform/config"
+	"github.com/fidelis27/secretaria-backend/internal/platform/config"
 )
 
 type Connection struct {

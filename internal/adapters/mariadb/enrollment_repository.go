@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	domainenrollment "github.com/karol/secretaria-escolar-backend/internal/domain/enrollment"
+	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
 )
 
 type EnrollmentRepository struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	domainuser "github.com/karol/secretaria-escolar-backend/internal/domain/user"
+	domainuser "github.com/fidelis27/secretaria-backend/internal/domain/user"
 )
 
 type UserRepository struct {

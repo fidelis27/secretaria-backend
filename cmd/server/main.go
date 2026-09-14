@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/karol/secretaria-escolar-backend/internal/adapters/httpserver"
-	"github.com/karol/secretaria-escolar-backend/internal/adapters/mariadb"
-	applicationenrollment "github.com/karol/secretaria-escolar-backend/internal/application/enrollment"
-	"github.com/karol/secretaria-escolar-backend/internal/application/health"
-	applicationinstitution "github.com/karol/secretaria-escolar-backend/internal/application/institution"
-	applicationstudent "github.com/karol/secretaria-escolar-backend/internal/application/student"
-	applicationuser "github.com/karol/secretaria-escolar-backend/internal/application/user"
-	"github.com/karol/secretaria-escolar-backend/internal/platform/config"
+	"github.com/fidelis27/secretaria-backend/internal/adapters/httpserver"
+	"github.com/fidelis27/secretaria-backend/internal/adapters/mariadb"
+	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
+	"github.com/fidelis27/secretaria-backend/internal/application/health"
+	applicationinstitution "github.com/fidelis27/secretaria-backend/internal/application/institution"
+	applicationstudent "github.com/fidelis27/secretaria-backend/internal/application/student"
+	applicationuser "github.com/fidelis27/secretaria-backend/internal/application/user"
+	"github.com/fidelis27/secretaria-backend/internal/platform/config"
 )
 
 func main() {

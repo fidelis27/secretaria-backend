@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/karol/secretaria-escolar-backend/internal/domain/institution"
+	"github.com/fidelis27/secretaria-backend/internal/domain/institution"
 )
 
 type Service struct {
