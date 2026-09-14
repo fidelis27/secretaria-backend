@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"strings"
+	"time"
 
 	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
 )
@@ -45,6 +46,26 @@ func (service Service) Transfer(ctx context.Context, studentID string, enrollmen
 		return domainenrollment.Enrollment{}, err
 	}
 	return destination, nil
+}
+
+func (service Service) Suspend(ctx context.Context, studentID string, enrollmentID string, reason string, suspendedAt time.Time) error {
+	if err := domainenrollment.ValidateSuspension(studentID, enrollmentID, reason); err != nil {
+		return err
+	}
+	if suspendedAt.IsZero() {
+		return domainenrollment.ErrSuspensionDateRequired
+	}
+	return service.repository.Suspend(ctx, studentID, enrollmentID, strings.TrimSpace(reason), suspendedAt)
+}
+
+func (service Service) Reopen(ctx context.Context, studentID string, enrollmentID string) error {
+	if strings.TrimSpace(studentID) == "" {
+		return domainenrollment.ErrStudentIDRequired
+	}
+	if strings.TrimSpace(enrollmentID) == "" {
+		return domainenrollment.ErrEnrollmentIDRequired
+	}
+	return service.repository.Reopen(ctx, studentID, enrollmentID)
 }
 
 func newID() string {

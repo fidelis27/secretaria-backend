@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
 )
@@ -33,6 +34,14 @@ func (repository *transferRepository) Transfer(_ context.Context, studentID stri
 	return nil
 }
 
+func (*transferRepository) Suspend(context.Context, string, string, string, time.Time) error {
+	return nil
+}
+
+func (*transferRepository) Reopen(context.Context, string, string) error {
+	return nil
+}
+
 func TestServiceTransferCreatesDestinationEnrollment(t *testing.T) {
 	repository := &transferRepository{}
 	service := NewService(repository)
@@ -55,6 +64,35 @@ func TestServiceTransferRejectsMissingSourceEnrollment(t *testing.T) {
 	}
 }
 
+func TestServiceSuspendRequiresReason(t *testing.T) {
+	service := NewService(&transferRepository{})
+
+	err := service.Suspend(context.Background(), "student-1", "enrollment-1", "  ", time.Now())
+	if !errors.Is(err, domainenrollment.ErrSuspensionReasonRequired) {
+		t.Fatalf("expected suspension reason error, got %v", err)
+	}
+}
+
+func TestServiceSuspendRequiresDate(t *testing.T) {
+	service := NewService(&transferRepository{})
+
+	err := service.Suspend(context.Background(), "student-1", "enrollment-1", "leave", time.Time{})
+	if !errors.Is(err, domainenrollment.ErrSuspensionDateRequired) {
+		t.Fatalf("expected suspension date error, got %v", err)
+	}
+}
+
+func TestServiceSuspendAndReopen(t *testing.T) {
+	service := NewService(&transferRepository{})
+
+	if err := service.Suspend(context.Background(), "student-1", "enrollment-1", "leave", time.Now()); err != nil {
+		t.Fatalf("suspend returned error: %v", err)
+	}
+	if err := service.Reopen(context.Background(), "student-1", "enrollment-1"); err != nil {
+		t.Fatalf("reopen returned error: %v", err)
+	}
+}
+
 type repositoryStub struct {
 	created []domainenrollment.Enrollment
 }
@@ -69,6 +107,14 @@ func (*repositoryStub) List(context.Context) ([]domainenrollment.Enrollment, err
 }
 
 func (*repositoryStub) Transfer(context.Context, string, string, domainenrollment.Enrollment) error {
+	return nil
+}
+
+func (*repositoryStub) Suspend(context.Context, string, string, string, time.Time) error {
+	return nil
+}
+
+func (*repositoryStub) Reopen(context.Context, string, string) error {
 	return nil
 }
 

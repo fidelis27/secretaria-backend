@@ -2,7 +2,9 @@ package mariadb
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"time"
 
 	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
 )
@@ -28,7 +30,7 @@ func (repository EnrollmentRepository) Create(ctx context.Context, entity domain
 
 func (repository EnrollmentRepository) List(ctx context.Context) ([]domainenrollment.Enrollment, error) {
 	rows, err := repository.connection.database.QueryContext(ctx,
-		`SELECT id, student_id, institution_id, status FROM enrollments ORDER BY student_id, id`,
+		`SELECT id, student_id, institution_id, status, suspension_reason, suspended_at FROM enrollments ORDER BY student_id, id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list enrollments: %w", err)
@@ -38,15 +40,57 @@ func (repository EnrollmentRepository) List(ctx context.Context) ([]domainenroll
 	result := make([]domainenrollment.Enrollment, 0)
 	for rows.Next() {
 		var entity domainenrollment.Enrollment
-		if err := rows.Scan(&entity.ID, &entity.StudentID, &entity.InstitutionID, &entity.Status); err != nil {
+		var suspensionReason sql.NullString
+		var suspendedAt *time.Time
+		if err := rows.Scan(&entity.ID, &entity.StudentID, &entity.InstitutionID, &entity.Status, &suspensionReason, &suspendedAt); err != nil {
 			return nil, fmt.Errorf("scan enrollment: %w", err)
 		}
+		if suspensionReason.Valid {
+			entity.SuspensionReason = suspensionReason.String
+		}
+		entity.SuspendedAt = suspendedAt
 		result = append(result, entity)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate enrollments: %w", err)
 	}
 	return result, nil
+}
+
+func (repository EnrollmentRepository) Suspend(ctx context.Context, studentID string, enrollmentID string, reason string, suspendedAt time.Time) error {
+	result, err := repository.connection.database.ExecContext(ctx,
+		`UPDATE enrollments SET status = 'suspended', suspension_reason = ?, suspended_at = ? WHERE id = ? AND student_id = ? AND status = 'active'`,
+		reason, suspendedAt, enrollmentID, studentID,
+	)
+	if err != nil {
+		return fmt.Errorf("suspend enrollment: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check suspended enrollment: %w", err)
+	}
+	if rowsAffected != 1 {
+		return domainenrollment.ErrEnrollmentNotActive
+	}
+	return nil
+}
+
+func (repository EnrollmentRepository) Reopen(ctx context.Context, studentID string, enrollmentID string) error {
+	result, err := repository.connection.database.ExecContext(ctx,
+		`UPDATE enrollments SET status = 'active' WHERE id = ? AND student_id = ? AND status = 'suspended'`,
+		enrollmentID, studentID,
+	)
+	if err != nil {
+		return fmt.Errorf("reopen enrollment: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check reopened enrollment: %w", err)
+	}
+	if rowsAffected != 1 {
+		return domainenrollment.ErrEnrollmentNotSuspended
+	}
+	return nil
 }
 
 func (repository EnrollmentRepository) Transfer(ctx context.Context, studentID string, enrollmentID string, destination domainenrollment.Enrollment) error {

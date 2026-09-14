@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
 	"github.com/fidelis27/secretaria-backend/internal/application/health"
@@ -165,6 +166,51 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
+	})
+	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/suspend", func(writer http.ResponseWriter, request *http.Request) {
+		var input struct {
+			Reason string `json:"reason"`
+			Date   string `json:"date"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		suspendedAt, err := time.Parse(time.RFC3339, input.Date)
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, "date must be RFC3339")
+			return
+		}
+		err = enrollmentService.Suspend(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"), input.Reason, suspendedAt)
+		if errors.Is(err, domainenrollment.ErrStudentIDRequired) || errors.Is(err, domainenrollment.ErrEnrollmentIDRequired) || errors.Is(err, domainenrollment.ErrSuspensionReasonRequired) || errors.Is(err, domainenrollment.ErrSuspensionDateRequired) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, domainenrollment.ErrEnrollmentNotActive) {
+			writeError(writer, http.StatusConflict, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not suspend enrollment")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]string{"status": "suspended"})
+	})
+	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/reopen", func(writer http.ResponseWriter, request *http.Request) {
+		err := enrollmentService.Reopen(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"))
+		if errors.Is(err, domainenrollment.ErrStudentIDRequired) || errors.Is(err, domainenrollment.ErrEnrollmentIDRequired) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, domainenrollment.ErrEnrollmentNotSuspended) {
+			writeError(writer, http.StatusConflict, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not reopen enrollment")
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]string{"status": "active"})
 	})
 
 	return &Server{
