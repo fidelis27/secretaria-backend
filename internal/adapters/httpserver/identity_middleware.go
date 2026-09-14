@@ -19,6 +19,9 @@ func identityMiddleware(next http.Handler, users applicationuser.Service) http.H
 		}
 
 		userID := strings.TrimSpace(request.Header.Get("x-demo-user"))
+		if userID == "" && websocketRequest(request) {
+			userID = strings.TrimSpace(request.URL.Query().Get("demoUser"))
+		}
 		if userID == "" {
 			writeError(writer, http.StatusUnauthorized, "unauthorized")
 			return
@@ -36,6 +39,10 @@ func identityMiddleware(next http.Handler, users applicationuser.Service) http.H
 		request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, user))
 		next.ServeHTTP(writer, request)
 	})
+}
+
+func websocketRequest(request *http.Request) bool {
+	return strings.EqualFold(request.Header.Get("Upgrade"), "websocket")
 }
 
 func userFromContext(ctx context.Context) (domainuser.User, bool) {
