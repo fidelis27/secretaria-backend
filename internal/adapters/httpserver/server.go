@@ -177,6 +177,16 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not transfer enrollment")
 			return
 		}
+		domainEvent, err := domainevent.New("STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), map[string]string{
+			"studentId":             request.PathValue("studentId"),
+			"sourceEnrollment":      request.PathValue("enrollmentId"),
+			"destinationEnrollment": created.ID,
+			"institutionId":         created.InstitutionID,
+		})
+		if err != nil || eventService.Publish(request.Context(), domainEvent) != nil {
+			writeError(writer, http.StatusInternalServerError, "could not publish transfer event")
+			return
+		}
 		writeJSON(writer, http.StatusCreated, created)
 	})
 	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/suspend", func(writer http.ResponseWriter, request *http.Request) {
@@ -206,6 +216,16 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not suspend enrollment")
 			return
 		}
+		domainEvent, err := domainevent.New("ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), map[string]string{
+			"studentId":    request.PathValue("studentId"),
+			"enrollmentId": request.PathValue("enrollmentId"),
+			"reason":       input.Reason,
+			"date":         input.Date,
+		})
+		if err != nil || eventService.Publish(request.Context(), domainEvent) != nil {
+			writeError(writer, http.StatusInternalServerError, "could not publish suspension event")
+			return
+		}
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "suspended"})
 	})
 	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/reopen", func(writer http.ResponseWriter, request *http.Request) {
@@ -220,6 +240,14 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not reopen enrollment")
+			return
+		}
+		domainEvent, err := domainevent.New("ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), map[string]string{
+			"studentId":    request.PathValue("studentId"),
+			"enrollmentId": request.PathValue("enrollmentId"),
+		})
+		if err != nil || eventService.Publish(request.Context(), domainEvent) != nil {
+			writeError(writer, http.StatusInternalServerError, "could not publish reopening event")
 			return
 		}
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "active"})
