@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/karol/secretaria-escolar-backend/internal/application/health"
 	applicationenrollment "github.com/karol/secretaria-escolar-backend/internal/application/enrollment"
+	"github.com/karol/secretaria-escolar-backend/internal/application/health"
 	applicationinstitution "github.com/karol/secretaria-escolar-backend/internal/application/institution"
 	applicationstudent "github.com/karol/secretaria-escolar-backend/internal/application/student"
 	applicationuser "github.com/karol/secretaria-escolar-backend/internal/application/user"
