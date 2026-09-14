@@ -7,6 +7,8 @@ import (
 
 var ErrStudentIDRequired = errors.New("student id is required")
 var ErrInstitutionIDRequired = errors.New("institution id is required")
+var ErrEnrollmentIDRequired = errors.New("enrollment id is required")
+var ErrSourceEnrollmentNotActive = errors.New("source enrollment is not active")
 
 type Enrollment struct {
 	ID            string `json:"id"`
@@ -31,4 +33,17 @@ func New(id string, studentID string, institutionID string) (Enrollment, error) 
 		InstitutionID: trimmedInstitutionID,
 		Status:        "active",
 	}, nil
+}
+
+func ValidateTransfer(studentID string, enrollmentID string, institutionID string) error {
+	if strings.TrimSpace(studentID) == "" {
+		return ErrStudentIDRequired
+	}
+	if strings.TrimSpace(enrollmentID) == "" {
+		return ErrEnrollmentIDRequired
+	}
+	if strings.TrimSpace(institutionID) == "" {
+		return ErrInstitutionIDRequired
+	}
+	return nil
 }

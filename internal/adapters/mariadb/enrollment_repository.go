@@ -48,3 +48,37 @@ func (repository EnrollmentRepository) List(ctx context.Context) ([]domainenroll
 	}
 	return result, nil
 }
+
+func (repository EnrollmentRepository) Transfer(ctx context.Context, studentID string, enrollmentID string, destination domainenrollment.Enrollment) error {
+	transaction, err := repository.connection.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin enrollment transfer: %w", err)
+	}
+	defer transaction.Rollback()
+
+	result, err := transaction.ExecContext(ctx,
+		`UPDATE enrollments SET status = 'transferred' WHERE id = ? AND student_id = ? AND status = 'active'`,
+		enrollmentID, studentID,
+	)
+	if err != nil {
+		return fmt.Errorf("close source enrollment: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check source enrollment: %w", err)
+	}
+	if rowsAffected != 1 {
+		return domainenrollment.ErrSourceEnrollmentNotActive
+	}
+
+	if _, err := transaction.ExecContext(ctx,
+		`INSERT INTO enrollments (id, student_id, institution_id, status) VALUES (?, ?, ?, ?)`,
+		destination.ID, destination.StudentID, destination.InstitutionID, destination.Status,
+	); err != nil {
+		return fmt.Errorf("create destination enrollment: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("commit enrollment transfer: %w", err)
+	}
+	return nil
+}

@@ -32,6 +32,21 @@ func (service Service) List(ctx context.Context) ([]domainenrollment.Enrollment,
 	return service.repository.List(ctx)
 }
 
+func (service Service) Transfer(ctx context.Context, studentID string, enrollmentID string, institutionID string) (domainenrollment.Enrollment, error) {
+	if err := domainenrollment.ValidateTransfer(studentID, enrollmentID, institutionID); err != nil {
+		return domainenrollment.Enrollment{}, err
+	}
+
+	destination, err := domainenrollment.New(newID(), studentID, institutionID)
+	if err != nil {
+		return domainenrollment.Enrollment{}, err
+	}
+	if err := service.repository.Transfer(ctx, studentID, enrollmentID, destination); err != nil {
+		return domainenrollment.Enrollment{}, err
+	}
+	return destination, nil
+}
+
 func newID() string {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {

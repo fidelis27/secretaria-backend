@@ -143,6 +143,29 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		writeJSON(writer, http.StatusCreated, created)
 	})
+	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/transfer", func(writer http.ResponseWriter, request *http.Request) {
+		var input struct {
+			InstitutionID string `json:"institutionId"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		created, err := enrollmentService.Transfer(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"), input.InstitutionID)
+		if errors.Is(err, domainenrollment.ErrStudentIDRequired) || errors.Is(err, domainenrollment.ErrEnrollmentIDRequired) || errors.Is(err, domainenrollment.ErrInstitutionIDRequired) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, domainenrollment.ErrSourceEnrollmentNotActive) {
+			writeError(writer, http.StatusConflict, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not transfer enrollment")
+			return
+		}
+		writeJSON(writer, http.StatusCreated, created)
+	})
 
 	return &Server{
 		httpServer: &http.Server{
