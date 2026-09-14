@@ -7,14 +7,16 @@ import (
 
 	"github.com/karol/secretaria-escolar-backend/internal/application/health"
 	applicationinstitution "github.com/karol/secretaria-escolar-backend/internal/application/institution"
+	applicationuser "github.com/karol/secretaria-escolar-backend/internal/application/user"
 	domaininstitution "github.com/karol/secretaria-escolar-backend/internal/domain/institution"
+	domainuser "github.com/karol/secretaria-escolar-backend/internal/domain/user"
 )
 
 type Server struct {
 	httpServer *http.Server
 }
 
-func New(addr string, healthService health.Service, institutionService applicationinstitution.Service) *Server {
+func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -48,6 +50,35 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not create institution")
+			return
+		}
+		writeJSON(writer, http.StatusCreated, created)
+	})
+	mux.HandleFunc("GET /users", func(writer http.ResponseWriter, request *http.Request) {
+		users, err := userService.List(request.Context())
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not list users")
+			return
+		}
+		writeJSON(writer, http.StatusOK, users)
+	})
+	mux.HandleFunc("POST /users", func(writer http.ResponseWriter, request *http.Request) {
+		var input struct {
+			Name       string `json:"name"`
+			Email      string `json:"email"`
+			SuperAdmin bool   `json:"superAdmin"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		created, err := userService.Create(request.Context(), input.Name, input.Email, input.SuperAdmin)
+		if errors.Is(err, domainuser.ErrNameRequired) || errors.Is(err, domainuser.ErrEmailRequired) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not create user")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
