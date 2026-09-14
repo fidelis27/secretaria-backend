@@ -7,11 +7,13 @@ import (
 	"time"
 
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
+	applicationevent "github.com/fidelis27/secretaria-backend/internal/application/event"
 	"github.com/fidelis27/secretaria-backend/internal/application/health"
 	applicationinstitution "github.com/fidelis27/secretaria-backend/internal/application/institution"
 	applicationstudent "github.com/fidelis27/secretaria-backend/internal/application/student"
 	applicationuser "github.com/fidelis27/secretaria-backend/internal/application/user"
 	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
+	domainevent "github.com/fidelis27/secretaria-backend/internal/domain/event"
 	domaininstitution "github.com/fidelis27/secretaria-backend/internal/domain/institution"
 	domainstudent "github.com/fidelis27/secretaria-backend/internal/domain/student"
 	domainuser "github.com/fidelis27/secretaria-backend/internal/domain/user"
@@ -21,7 +23,7 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service) *Server {
+func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -114,8 +116,18 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not create student")
 			return
 		}
+		domainEvent, err := domainevent.New("STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), created)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not create student event")
+			return
+		}
+		if err := eventService.Publish(request.Context(), domainEvent); err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not publish student event")
+			return
+		}
 		writeJSON(writer, http.StatusCreated, created)
 	})
+	mux.Handle("GET /events", eventHandler(eventBus))
 	mux.HandleFunc("GET /enrollments", func(writer http.ResponseWriter, request *http.Request) {
 		enrollments, err := enrollmentService.List(request.Context())
 		if err != nil {

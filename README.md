@@ -38,3 +38,9 @@ curl -H "x-demo-user: <user-id>" http://localhost:3333/institutions
 
 Sem o header a API retorna `401`. Usuarios inexistentes ou inativos recebem
 `403`. Esse mecanismo e somente para demonstracao local.
+
+## Eventos
+
+O WebSocket `GET /events` exige o mesmo `x-demo-user` e transmite eventos com
+`eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` e
+`payload`. Eventos sao persistidos em `audit_events` antes da distribuicao.

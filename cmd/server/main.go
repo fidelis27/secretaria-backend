@@ -7,6 +7,7 @@ import (
 	"github.com/fidelis27/secretaria-backend/internal/adapters/httpserver"
 	"github.com/fidelis27/secretaria-backend/internal/adapters/mariadb"
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
+	applicationevent "github.com/fidelis27/secretaria-backend/internal/application/event"
 	"github.com/fidelis27/secretaria-backend/internal/application/health"
 	applicationinstitution "github.com/fidelis27/secretaria-backend/internal/application/institution"
 	applicationstudent "github.com/fidelis27/secretaria-backend/internal/application/student"
@@ -34,7 +35,10 @@ func main() {
 	studentService := applicationstudent.NewService(studentRepository)
 	enrollmentRepository := mariadb.NewEnrollmentRepository(database)
 	enrollmentService := applicationenrollment.NewService(enrollmentRepository)
-	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService)
+	eventBus := applicationevent.NewBus()
+	eventRepository := mariadb.NewEventRepository(database)
+	eventService := applicationevent.NewService(eventRepository, eventBus)
+	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus)
 	log.Printf("server listening on %s", address)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
