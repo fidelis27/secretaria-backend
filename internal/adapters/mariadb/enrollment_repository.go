@@ -57,6 +57,27 @@ func (repository EnrollmentRepository) List(ctx context.Context) ([]domainenroll
 	return result, nil
 }
 
+func (repository EnrollmentRepository) FindByID(ctx context.Context, studentID string, enrollmentID string) (domainenrollment.Enrollment, bool, error) {
+	var entity domainenrollment.Enrollment
+	var suspensionReason sql.NullString
+	var suspendedAt *time.Time
+	err := repository.connection.database.QueryRowContext(ctx,
+		`SELECT id, student_id, institution_id, status, suspension_reason, suspended_at
+		 FROM enrollments WHERE id = ? AND student_id = ?`, enrollmentID, studentID,
+	).Scan(&entity.ID, &entity.StudentID, &entity.InstitutionID, &entity.Status, &suspensionReason, &suspendedAt)
+	if err == sql.ErrNoRows {
+		return domainenrollment.Enrollment{}, false, nil
+	}
+	if err != nil {
+		return domainenrollment.Enrollment{}, false, fmt.Errorf("find enrollment by id: %w", err)
+	}
+	if suspensionReason.Valid {
+		entity.SuspensionReason = suspensionReason.String
+	}
+	entity.SuspendedAt = suspendedAt
+	return entity, true, nil
+}
+
 func (repository EnrollmentRepository) Suspend(ctx context.Context, studentID string, enrollmentID string, reason string, suspendedAt time.Time) error {
 	result, err := repository.connection.database.ExecContext(ctx,
 		`UPDATE enrollments SET status = 'suspended', suspension_reason = ?, suspended_at = ? WHERE id = ? AND student_id = ? AND status = 'active'`,

@@ -12,6 +12,7 @@ import (
 	applicationinstitution "github.com/fidelis27/secretaria-backend/internal/application/institution"
 	applicationstudent "github.com/fidelis27/secretaria-backend/internal/application/student"
 	applicationuser "github.com/fidelis27/secretaria-backend/internal/application/user"
+	"github.com/fidelis27/secretaria-backend/internal/domain/authorization"
 	"github.com/fidelis27/secretaria-backend/internal/platform/config"
 )
 
@@ -38,7 +39,9 @@ func main() {
 	eventBus := applicationevent.NewBus()
 	eventRepository := mariadb.NewEventRepository(database)
 	eventService := applicationevent.NewService(eventRepository, eventBus)
-	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus)
+	membershipRepository := mariadb.NewMemberGroupRepository(database)
+	policy := authorization.NewPolicy(membershipRepository)
+	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, policy)
 	log.Printf("server listening on %s", address)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)

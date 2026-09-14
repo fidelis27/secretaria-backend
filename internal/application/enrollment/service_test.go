@@ -23,6 +23,10 @@ func (repository *transferRepository) List(_ context.Context) ([]domainenrollmen
 	return nil, nil
 }
 
+func (*transferRepository) FindByID(context.Context, string, string) (domainenrollment.Enrollment, bool, error) {
+	return domainenrollment.Enrollment{}, false, nil
+}
+
 func (repository *transferRepository) Transfer(_ context.Context, studentID string, enrollmentID string, destination domainenrollment.Enrollment) error {
 	if repository.transferErr != nil {
 		return repository.transferErr
@@ -106,6 +110,10 @@ func (*repositoryStub) List(context.Context) ([]domainenrollment.Enrollment, err
 	return nil, nil
 }
 
+func (*repositoryStub) FindByID(context.Context, string, string) (domainenrollment.Enrollment, bool, error) {
+	return domainenrollment.Enrollment{}, false, nil
+}
+
 func (*repositoryStub) Transfer(context.Context, string, string, domainenrollment.Enrollment) error {
 	return nil
 }
@@ -116,6 +124,33 @@ func (*repositoryStub) Suspend(context.Context, string, string, string, time.Tim
 
 func (*repositoryStub) Reopen(context.Context, string, string) error {
 	return nil
+}
+
+type lookupRepository struct {
+	repositoryStub
+	stored domainenrollment.Enrollment
+}
+
+func (repository *lookupRepository) FindByID(_ context.Context, studentID string, enrollmentID string) (domainenrollment.Enrollment, bool, error) {
+	if repository.stored.StudentID == studentID && repository.stored.ID == enrollmentID {
+		return repository.stored, true, nil
+	}
+	return domainenrollment.Enrollment{}, false, nil
+}
+
+func TestServiceFindByIDReturnsMatchingEnrollment(t *testing.T) {
+	repository := &lookupRepository{stored: domainenrollment.Enrollment{ID: "enrollment-1", StudentID: "student-1", InstitutionID: "institution-1", Status: "active"}}
+	found, ok, err := NewService(repository).FindByID(context.Background(), "student-1", "enrollment-1")
+	if err != nil || !ok || found.InstitutionID != "institution-1" {
+		t.Fatalf("unexpected lookup result: found=%v ok=%v err=%v", found, ok, err)
+	}
+}
+
+func TestServiceFindByIDReturnsFalseWhenMissing(t *testing.T) {
+	_, ok, err := NewService(&lookupRepository{}).FindByID(context.Background(), "student-1", "enrollment-1")
+	if err != nil || ok {
+		t.Fatalf("expected missing enrollment, ok=%v err=%v", ok, err)
+	}
 }
 
 func TestServiceCreatesActiveEnrollment(t *testing.T) {

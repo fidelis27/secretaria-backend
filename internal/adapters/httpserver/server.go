@@ -12,6 +12,7 @@ import (
 	applicationinstitution "github.com/fidelis27/secretaria-backend/internal/application/institution"
 	applicationstudent "github.com/fidelis27/secretaria-backend/internal/application/student"
 	applicationuser "github.com/fidelis27/secretaria-backend/internal/application/user"
+	domainauthorization "github.com/fidelis27/secretaria-backend/internal/domain/authorization"
 	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
 	domainevent "github.com/fidelis27/secretaria-backend/internal/domain/event"
 	domaininstitution "github.com/fidelis27/secretaria-backend/internal/domain/institution"
@@ -23,7 +24,7 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus) *Server {
+func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, policy domainauthorization.Policy) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -48,6 +49,11 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		user, _ := userFromContext(request.Context())
+		if !user.SuperAdmin {
+			writeError(writer, http.StatusForbidden, "forbidden")
 			return
 		}
 		created, err := institutionService.Create(request.Context(), input.Name, input.CNPJ)
@@ -107,6 +113,9 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
+		if !authorizeInstitutionEdit(writer, request, policy, input.InstitutionID) {
+			return
+		}
 		created, err := studentService.Create(request.Context(), input.Name, input.InstitutionID)
 		if errors.Is(err, domainstudent.ErrNameRequired) || errors.Is(err, domainstudent.ErrInstitutionIDRequired) {
 			writeError(writer, http.StatusBadRequest, err.Error())
@@ -145,6 +154,9 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
+		if !authorizeInstitutionEdit(writer, request, policy, input.InstitutionID) {
+			return
+		}
 		created, err := enrollmentService.Create(request.Context(), input.StudentID, input.InstitutionID)
 		if errors.Is(err, domainenrollment.ErrStudentIDRequired) || errors.Is(err, domainenrollment.ErrInstitutionIDRequired) {
 			writeError(writer, http.StatusBadRequest, err.Error())
@@ -162,6 +174,18 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		existing, found, err := enrollmentService.FindByID(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"))
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not load enrollment")
+			return
+		}
+		if !found {
+			writeError(writer, http.StatusNotFound, "enrollment not found")
+			return
+		}
+		if !authorizeInstitutionEdit(writer, request, policy, existing.InstitutionID) || !authorizeInstitutionEdit(writer, request, policy, input.InstitutionID) {
 			return
 		}
 		created, err := enrollmentService.Transfer(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"), input.InstitutionID)
@@ -203,6 +227,18 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusBadRequest, "date must be RFC3339")
 			return
 		}
+		existing, found, err := enrollmentService.FindByID(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"))
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not load enrollment")
+			return
+		}
+		if !found {
+			writeError(writer, http.StatusNotFound, "enrollment not found")
+			return
+		}
+		if !authorizeInstitutionEdit(writer, request, policy, existing.InstitutionID) {
+			return
+		}
 		err = enrollmentService.Suspend(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"), input.Reason, suspendedAt)
 		if errors.Is(err, domainenrollment.ErrStudentIDRequired) || errors.Is(err, domainenrollment.ErrEnrollmentIDRequired) || errors.Is(err, domainenrollment.ErrSuspensionReasonRequired) || errors.Is(err, domainenrollment.ErrSuspensionDateRequired) {
 			writeError(writer, http.StatusBadRequest, err.Error())
@@ -229,7 +265,19 @@ func New(addr string, healthService health.Service, institutionService applicati
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "suspended"})
 	})
 	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/reopen", func(writer http.ResponseWriter, request *http.Request) {
-		err := enrollmentService.Reopen(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"))
+		existing, found, err := enrollmentService.FindByID(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"))
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not load enrollment")
+			return
+		}
+		if !found {
+			writeError(writer, http.StatusNotFound, "enrollment not found")
+			return
+		}
+		if !authorizeInstitutionEdit(writer, request, policy, existing.InstitutionID) {
+			return
+		}
+		err = enrollmentService.Reopen(request.Context(), request.PathValue("studentId"), request.PathValue("enrollmentId"))
 		if errors.Is(err, domainenrollment.ErrStudentIDRequired) || errors.Is(err, domainenrollment.ErrEnrollmentIDRequired) {
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
@@ -259,6 +307,24 @@ func New(addr string, healthService health.Service, institutionService applicati
 			Handler: identityMiddleware(mux, userService),
 		},
 	}
+}
+
+func authorizeInstitutionEdit(writer http.ResponseWriter, request *http.Request, policy domainauthorization.Policy, institutionID string) bool {
+	user, ok := userFromContext(request.Context())
+	if !ok {
+		writeError(writer, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+	allowed, err := policy.CanEditInstitution(request.Context(), user, institutionID)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, "could not verify authorization")
+		return false
+	}
+	if !allowed {
+		writeError(writer, http.StatusForbidden, "forbidden")
+		return false
+	}
+	return true
 }
 
 func writeJSON(writer http.ResponseWriter, status int, value any) {
