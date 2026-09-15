@@ -12,6 +12,7 @@ import (
 
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
 	applicationevent "github.com/fidelis27/secretaria-backend/internal/application/event"
+	applicationgroup "github.com/fidelis27/secretaria-backend/internal/application/group"
 	"github.com/fidelis27/secretaria-backend/internal/application/health"
 	applicationinstitution "github.com/fidelis27/secretaria-backend/internal/application/institution"
 	applicationstudent "github.com/fidelis27/secretaria-backend/internal/application/student"
@@ -19,6 +20,7 @@ import (
 	domainauthorization "github.com/fidelis27/secretaria-backend/internal/domain/authorization"
 	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
 	domainevent "github.com/fidelis27/secretaria-backend/internal/domain/event"
+	domaingroup "github.com/fidelis27/secretaria-backend/internal/domain/group"
 	domaininstitution "github.com/fidelis27/secretaria-backend/internal/domain/institution"
 	domainstudent "github.com/fidelis27/secretaria-backend/internal/domain/student"
 	domainuser "github.com/fidelis27/secretaria-backend/internal/domain/user"
@@ -28,7 +30,7 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, policy domainauthorization.Policy) *Server {
+func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy) *Server {
 	mux := http.NewServeMux()
 	metrics := newRequestMetrics()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
@@ -108,6 +110,115 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not create user")
+			return
+		}
+		writeJSON(writer, http.StatusCreated, created)
+	})
+	mux.HandleFunc("GET /groups", func(writer http.ResponseWriter, request *http.Request) {
+		user, _ := userFromContext(request.Context())
+		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not resolve group scope")
+			return
+		}
+		var groups []domaingroup.Group
+		if user.SuperAdmin {
+			groups, err = groupService.List(request.Context())
+		} else {
+			groups, err = groupService.ListByInstitutionIDs(request.Context(), institutionIDs)
+		}
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not list groups")
+			return
+		}
+		writeJSON(writer, http.StatusOK, groups)
+	})
+	mux.HandleFunc("POST /groups", func(writer http.ResponseWriter, request *http.Request) {
+		user, _ := userFromContext(request.Context())
+		if !policy.CanCreateGroup(user) {
+			writeError(writer, http.StatusForbidden, "forbidden")
+			return
+		}
+		var input struct {
+			InstitutionID string `json:"institutionId"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		created, err := groupService.Create(request.Context(), input.InstitutionID)
+		if errors.Is(err, domaingroup.ErrInstitutionIDRequired) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not create group")
+			return
+		}
+		writeJSON(writer, http.StatusCreated, created)
+	})
+	mux.HandleFunc("GET /groups/{groupId}/members", func(writer http.ResponseWriter, request *http.Request) {
+		user, _ := userFromContext(request.Context())
+		group, found, err := groupService.FindByID(request.Context(), request.PathValue("groupId"))
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not load group")
+			return
+		}
+		if !found {
+			writeError(writer, http.StatusNotFound, "group not found")
+			return
+		}
+		allowed, err := policy.CanManageGroup(request.Context(), user, group.ID)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not verify group authorization")
+			return
+		}
+		if !allowed {
+			writeError(writer, http.StatusForbidden, "forbidden")
+			return
+		}
+		memberships, err := groupService.ListMemberships(request.Context(), group.ID)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not list memberships")
+			return
+		}
+		writeJSON(writer, http.StatusOK, memberships)
+	})
+	mux.HandleFunc("POST /groups/{groupId}/members", func(writer http.ResponseWriter, request *http.Request) {
+		user, _ := userFromContext(request.Context())
+		group, found, err := groupService.FindByID(request.Context(), request.PathValue("groupId"))
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not load group")
+			return
+		}
+		if !found {
+			writeError(writer, http.StatusNotFound, "group not found")
+			return
+		}
+		allowed, err := policy.CanManageGroup(request.Context(), user, group.ID)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not verify group authorization")
+			return
+		}
+		if !allowed {
+			writeError(writer, http.StatusForbidden, "forbidden")
+			return
+		}
+		var input struct {
+			UserID string                   `json:"userId"`
+			Role   domainauthorization.Role `json:"role"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		created, err := groupService.AddMembership(request.Context(), input.UserID, group.ID, group.InstitutionID, input.Role)
+		if errors.Is(err, domaingroup.ErrUserIDRequired) || errors.Is(err, domaingroup.ErrGroupIDRequired) || errors.Is(err, domaingroup.ErrInvalidRole) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not create membership")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)

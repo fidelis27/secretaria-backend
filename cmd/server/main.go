@@ -9,6 +9,7 @@ import (
 	"github.com/fidelis27/secretaria-backend/internal/adapters/mariadb"
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
 	applicationevent "github.com/fidelis27/secretaria-backend/internal/application/event"
+	applicationgroup "github.com/fidelis27/secretaria-backend/internal/application/group"
 	"github.com/fidelis27/secretaria-backend/internal/application/health"
 	applicationinstitution "github.com/fidelis27/secretaria-backend/internal/application/institution"
 	applicationstudent "github.com/fidelis27/secretaria-backend/internal/application/student"
@@ -44,8 +45,10 @@ func main() {
 	eventService := applicationevent.NewService(eventRepository, eventBus)
 	membershipRepository := mariadb.NewMemberGroupRepository(database)
 	policy := authorization.NewPolicy(membershipRepository)
+	groupRepository := mariadb.NewGroupRepository(database)
+	groupService := applicationgroup.NewService(groupRepository)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, policy)
+	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, groupService, policy)
 	slog.Info("server listening", "address", address)
 	if err := server.ListenAndServe(); err != nil {
 		slog.Error("server stopped", "error", err)
