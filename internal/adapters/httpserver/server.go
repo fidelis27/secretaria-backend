@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
@@ -337,9 +339,42 @@ func New(addr string, healthService health.Service, institutionService applicati
 	return &Server{
 		httpServer: &http.Server{
 			Addr:    addr,
-			Handler: identityMiddleware(mux, userService),
+			Handler: corsMiddleware(identityMiddleware(mux, userService)),
 		},
 	}
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		origin := request.Header.Get("Origin")
+		if isLocalFrontendOrigin(origin) {
+			writer.Header().Set("Access-Control-Allow-Origin", origin)
+			writer.Header().Set("Vary", "Origin")
+			writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, x-demo-user, x-correlation-id")
+			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		}
+		if request.Method == http.MethodOptions {
+			writer.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(writer, request)
+	})
+}
+
+func isLocalFrontendOrigin(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	configuredOrigins := os.Getenv("CORS_ORIGINS")
+	if configuredOrigins == "" {
+		configuredOrigins = "http://localhost:4173,http://localhost:4174,http://localhost:4175,http://localhost:4176,http://localhost:4178,http://localhost:4179,http://127.0.0.1:4173,http://127.0.0.1:4174,http://127.0.0.1:4175,http://127.0.0.1:4176,http://127.0.0.1:4178,http://127.0.0.1:4179"
+	}
+	for _, configuredOrigin := range strings.Split(configuredOrigins, ",") {
+		if strings.TrimSpace(configuredOrigin) == origin {
+			return true
+		}
+	}
+	return false
 }
 
 func authorizeInstitutionEdit(writer http.ResponseWriter, request *http.Request, policy domainauthorization.Policy, institutionID string) bool {
