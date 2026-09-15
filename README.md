@@ -44,3 +44,8 @@ Sem o header a API retorna `401`. Usuarios inexistentes ou inativos recebem
 O WebSocket `GET /events` exige o mesmo `x-demo-user` e transmite eventos com
 `eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` e
 `payload`. Eventos sao persistidos em `audit_events` antes da distribuicao.
+
+## Guia local
+
+O passo a passo para iniciar XAMPP/MariaDB, aplicar migrations, acessar o
+phpMyAdmin e subir a API esta em [`docs/local-development.md`](../../docs/local-development.md).
