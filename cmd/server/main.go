@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/fidelis27/secretaria-backend/internal/adapters/httpserver"
 	"github.com/fidelis27/secretaria-backend/internal/adapters/mariadb"
@@ -19,11 +20,13 @@ import (
 func main() {
 	appConfig, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 	database, err := mariadb.Open(appConfig)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to open database", "error", err)
+		os.Exit(1)
 	}
 	defer database.Close()
 
@@ -41,9 +44,11 @@ func main() {
 	eventService := applicationevent.NewService(eventRepository, eventBus)
 	membershipRepository := mariadb.NewMemberGroupRepository(database)
 	policy := authorization.NewPolicy(membershipRepository)
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, policy)
-	log.Printf("server listening on %s", address)
+	slog.Info("server listening", "address", address)
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
 	}
 }

@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -29,6 +30,7 @@ type Server struct {
 
 func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, policy domainauthorization.Policy) *Server {
 	mux := http.NewServeMux()
+	metrics := newRequestMetrics()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		status := healthService.Check(request.Context())
@@ -162,6 +164,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		writeJSON(writer, http.StatusCreated, created)
 	})
 	mux.Handle("GET /events", eventHandler(eventBus))
+	mux.HandleFunc("GET /metrics", metrics.handler)
 	mux.HandleFunc("GET /events/history", func(writer http.ResponseWriter, request *http.Request) {
 		limit, _ := strconv.Atoi(request.URL.Query().Get("limit"))
 		events, err := eventService.List(request.Context(), limit)
@@ -349,7 +352,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 	return &Server{
 		httpServer: &http.Server{
 			Addr:    addr,
-			Handler: corsMiddleware(identityMiddleware(mux, userService)),
+			Handler: observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService)), slog.Default(), metrics),
 		},
 	}
 }
