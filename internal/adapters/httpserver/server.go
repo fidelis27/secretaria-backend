@@ -35,7 +35,18 @@ func New(addr string, healthService health.Service, institutionService applicati
 		_ = json.NewEncoder(writer).Encode(status)
 	})
 	mux.HandleFunc("GET /institutions", func(writer http.ResponseWriter, request *http.Request) {
-		institutions, err := institutionService.List(request.Context())
+		user, _ := userFromContext(request.Context())
+		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not resolve institution scope")
+			return
+		}
+		var institutions []domaininstitution.Institution
+		if user.SuperAdmin {
+			institutions, err = institutionService.List(request.Context())
+		} else {
+			institutions, err = institutionService.ListByIDs(request.Context(), institutionIDs)
+		}
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not list institutions")
 			return
@@ -97,7 +108,18 @@ func New(addr string, healthService health.Service, institutionService applicati
 		writeJSON(writer, http.StatusCreated, created)
 	})
 	mux.HandleFunc("GET /students", func(writer http.ResponseWriter, request *http.Request) {
-		students, err := studentService.List(request.Context())
+		user, _ := userFromContext(request.Context())
+		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not resolve institution scope")
+			return
+		}
+		var students []domainstudent.Student
+		if user.SuperAdmin {
+			students, err = studentService.List(request.Context())
+		} else {
+			students, err = studentService.ListByInstitutionIDs(request.Context(), institutionIDs)
+		}
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not list students")
 			return
@@ -138,7 +160,18 @@ func New(addr string, healthService health.Service, institutionService applicati
 	})
 	mux.Handle("GET /events", eventHandler(eventBus))
 	mux.HandleFunc("GET /enrollments", func(writer http.ResponseWriter, request *http.Request) {
-		enrollments, err := enrollmentService.List(request.Context())
+		user, _ := userFromContext(request.Context())
+		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not resolve institution scope")
+			return
+		}
+		var enrollments []domainenrollment.Enrollment
+		if user.SuperAdmin {
+			enrollments, err = enrollmentService.List(request.Context())
+		} else {
+			enrollments, err = enrollmentService.ListByInstitutionIDs(request.Context(), institutionIDs)
+		}
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not list enrollments")
 			return

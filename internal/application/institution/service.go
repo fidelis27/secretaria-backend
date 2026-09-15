@@ -32,6 +32,10 @@ func (service Service) List(ctx context.Context) ([]institution.Institution, err
 	return service.repository.List(ctx)
 }
 
+func (service Service) ListByIDs(ctx context.Context, ids []string) ([]institution.Institution, error) {
+	return service.repository.ListByIDs(ctx, ids)
+}
+
 func newID() string {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {

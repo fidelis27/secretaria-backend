@@ -20,6 +20,10 @@ func (*repositoryStub) List(context.Context) ([]domainstudent.Student, error) {
 	return nil, nil
 }
 
+func (*repositoryStub) ListByInstitutionIDs(context.Context, []string) ([]domainstudent.Student, error) {
+	return nil, nil
+}
+
 func TestServiceCreatesActiveStudent(t *testing.T) {
 	repository := &repositoryStub{}
 	created, err := NewService(repository).Create(context.Background(), "  Maria Silva  ", "  inst-123  ")

@@ -33,6 +33,10 @@ func (service Service) List(ctx context.Context) ([]domainenrollment.Enrollment,
 	return service.repository.List(ctx)
 }
 
+func (service Service) ListByInstitutionIDs(ctx context.Context, institutionIDs []string) ([]domainenrollment.Enrollment, error) {
+	return service.repository.ListByInstitutionIDs(ctx, institutionIDs)
+}
+
 func (service Service) FindByID(ctx context.Context, studentID string, enrollmentID string) (domainenrollment.Enrollment, bool, error) {
 	return service.repository.FindByID(ctx, studentID, enrollmentID)
 }

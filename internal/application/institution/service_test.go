@@ -20,6 +20,10 @@ func (*repositoryStub) List(context.Context) ([]institution.Institution, error) 
 	return nil, nil
 }
 
+func (*repositoryStub) ListByIDs(context.Context, []string) ([]institution.Institution, error) {
+	return nil, nil
+}
+
 func TestServiceCreatesActiveInstitution(t *testing.T) {
 	repository := &repositoryStub{}
 	created, err := NewService(repository).Create(context.Background(), "  Fatec Campinas  ", " 123 ")

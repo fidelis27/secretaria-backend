@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
@@ -55,6 +56,39 @@ func (repository EnrollmentRepository) List(ctx context.Context) ([]domainenroll
 		return nil, fmt.Errorf("iterate enrollments: %w", err)
 	}
 	return result, nil
+}
+
+func (repository EnrollmentRepository) ListByInstitutionIDs(ctx context.Context, institutionIDs []string) ([]domainenrollment.Enrollment, error) {
+	if len(institutionIDs) == 0 {
+		return []domainenrollment.Enrollment{}, nil
+	}
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(institutionIDs)), ",")
+	args := make([]any, len(institutionIDs))
+	for index, id := range institutionIDs {
+		args[index] = id
+	}
+	rows, err := repository.connection.database.QueryContext(ctx,
+		`SELECT id, student_id, institution_id, status, suspension_reason, suspended_at FROM enrollments WHERE institution_id IN (`+placeholders+`) ORDER BY student_id, id`, args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list enrollments by scope: %w", err)
+	}
+	defer rows.Close()
+	result := make([]domainenrollment.Enrollment, 0)
+	for rows.Next() {
+		var entity domainenrollment.Enrollment
+		var suspensionReason sql.NullString
+		var suspendedAt *time.Time
+		if err := rows.Scan(&entity.ID, &entity.StudentID, &entity.InstitutionID, &entity.Status, &suspensionReason, &suspendedAt); err != nil {
+			return nil, fmt.Errorf("scan scoped enrollment: %w", err)
+		}
+		if suspensionReason.Valid {
+			entity.SuspensionReason = suspensionReason.String
+		}
+		entity.SuspendedAt = suspendedAt
+		result = append(result, entity)
+	}
+	return result, rows.Err()
 }
 
 func (repository EnrollmentRepository) FindByID(ctx context.Context, studentID string, enrollmentID string) (domainenrollment.Enrollment, bool, error) {

@@ -27,6 +27,10 @@ func (*transferRepository) FindByID(context.Context, string, string) (domainenro
 	return domainenrollment.Enrollment{}, false, nil
 }
 
+func (*transferRepository) ListByInstitutionIDs(context.Context, []string) ([]domainenrollment.Enrollment, error) {
+	return nil, nil
+}
+
 func (repository *transferRepository) Transfer(_ context.Context, studentID string, enrollmentID string, destination domainenrollment.Enrollment) error {
 	if repository.transferErr != nil {
 		return repository.transferErr
@@ -112,6 +116,10 @@ func (*repositoryStub) List(context.Context) ([]domainenrollment.Enrollment, err
 
 func (*repositoryStub) FindByID(context.Context, string, string) (domainenrollment.Enrollment, bool, error) {
 	return domainenrollment.Enrollment{}, false, nil
+}
+
+func (*repositoryStub) ListByInstitutionIDs(context.Context, []string) ([]domainenrollment.Enrollment, error) {
+	return nil, nil
 }
 
 func (*repositoryStub) Transfer(context.Context, string, string, domainenrollment.Enrollment) error {

@@ -17,6 +17,7 @@ type Membership struct {
 }
 
 type MembershipRepository interface {
+	ListInstitutionIDsByUser(ctx context.Context, userID string) ([]string, error)
 	FindByUserAndInstitution(ctx context.Context, userID string, institutionID string) ([]Membership, error)
 	FindByUserAndGroup(ctx context.Context, userID string, groupID string) (Membership, bool, error)
 }

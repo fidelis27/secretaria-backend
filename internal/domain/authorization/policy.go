@@ -14,6 +14,13 @@ func NewPolicy(memberships MembershipRepository) Policy {
 	return Policy{memberships: memberships}
 }
 
+func (policy Policy) VisibleInstitutionIDs(ctx context.Context, user domainuser.User) ([]string, error) {
+	if user.SuperAdmin {
+		return nil, nil
+	}
+	return policy.memberships.ListInstitutionIDsByUser(ctx, user.ID)
+}
+
 func (policy Policy) CanReadInstitution(ctx context.Context, user domainuser.User, institutionID string) (bool, error) {
 	if user.Status != "active" {
 		return false, nil

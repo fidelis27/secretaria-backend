@@ -83,3 +83,13 @@ func TestIdentityMiddlewarePassesActiveUserAndPublicRoutes(t *testing.T) {
 		t.Fatalf("health status = %d, want %d", recorder.Code, http.StatusNoContent)
 	}
 }
+
+func TestIdentityMiddlewareProtectsUserCreation(t *testing.T) {
+	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(identityRepository{}))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/users", nil))
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("user creation status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+}

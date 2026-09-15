@@ -16,6 +16,28 @@ func NewMemberGroupRepository(connection *Connection) MemberGroupRepository {
 	return MemberGroupRepository{connection: connection}
 }
 
+func (repository MemberGroupRepository) ListInstitutionIDsByUser(ctx context.Context, userID string) ([]string, error) {
+	rows, err := repository.connection.database.QueryContext(ctx,
+		`SELECT DISTINCT g.institution_id FROM member_groups mg INNER JOIN groups g ON g.id = mg.group_id WHERE mg.user_id = ?`, userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list visible institutions: %w", err)
+	}
+	defer rows.Close()
+	result := make([]string, 0)
+	for rows.Next() {
+		var institutionID string
+		if err := rows.Scan(&institutionID); err != nil {
+			return nil, fmt.Errorf("scan visible institution: %w", err)
+		}
+		result = append(result, institutionID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate visible institutions: %w", err)
+	}
+	return result, nil
+}
+
 func (repository MemberGroupRepository) FindByUserAndInstitution(ctx context.Context, userID string, institutionID string) ([]domainauthorization.Membership, error) {
 	rows, err := repository.connection.database.QueryContext(ctx,
 		`SELECT mg.user_id, mg.group_id, g.institution_id, mg.role

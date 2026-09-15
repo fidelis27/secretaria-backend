@@ -11,6 +11,18 @@ type membershipRepository struct {
 	memberships []Membership
 }
 
+func (repository membershipRepository) ListInstitutionIDsByUser(_ context.Context, userID string) ([]string, error) {
+	seen := make(map[string]bool)
+	result := make([]string, 0)
+	for _, membership := range repository.memberships {
+		if membership.UserID == userID && !seen[membership.InstitutionID] {
+			seen[membership.InstitutionID] = true
+			result = append(result, membership.InstitutionID)
+		}
+	}
+	return result, nil
+}
+
 func (repository membershipRepository) FindByUserAndInstitution(_ context.Context, userID string, institutionID string) ([]Membership, error) {
 	result := make([]Membership, 0)
 	for _, membership := range repository.memberships {
@@ -90,5 +102,18 @@ func TestPolicyDeniesInactiveSuperAdmin(t *testing.T) {
 	canRead, err := policy.CanReadInstitution(context.Background(), inactive, "institution-a")
 	if err != nil || canRead || policy.CanCreateGroup(inactive) {
 		t.Fatalf("inactive permissions = read:%v create:%v err:%v", canRead, policy.CanCreateGroup(inactive), err)
+	}
+}
+
+func TestPolicyListsVisibleInstitutions(t *testing.T) {
+	policy := NewPolicy(membershipRepository{memberships: []Membership{
+		{UserID: "member", InstitutionID: "institution-a"},
+		{UserID: "member", InstitutionID: "institution-a"},
+		{UserID: "member", InstitutionID: "institution-b"},
+	}})
+
+	ids, err := policy.VisibleInstitutionIDs(context.Background(), domainuser.User{ID: "member", Status: "active"})
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("visible institution ids = %v, err = %v", ids, err)
 	}
 }

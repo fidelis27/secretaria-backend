@@ -13,7 +13,7 @@ type identityContextKey struct{}
 
 func identityMiddleware(next http.Handler, users applicationuser.Service) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == "/health" || (request.URL.Path == "/users" && request.Method == http.MethodPost) {
+		if request.URL.Path == "/health" {
 			next.ServeHTTP(writer, request)
 			return
 		}
