@@ -14,14 +14,14 @@ var eventUpgrader = websocket.Upgrader{
 
 func eventHandler(bus *applicationevent.Bus) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		subscriber, cancel := bus.Subscribe()
+		defer cancel()
 		connection, err := eventUpgrader.Upgrade(writer, request, nil)
 		if err != nil {
 			return
 		}
 		defer connection.Close()
 
-		subscriber, cancel := bus.Subscribe()
-		defer cancel()
 		for {
 			select {
 			case event, open := <-subscriber:
