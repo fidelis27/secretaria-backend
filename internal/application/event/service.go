@@ -30,3 +30,7 @@ func (service Service) Publish(ctx context.Context, event domainevent.Event) err
 func (service Service) Subscribe() (<-chan domainevent.Event, func()) {
 	return service.broadcaster.Subscribe()
 }
+
+func (service Service) List(ctx context.Context, limit int) ([]domainevent.Event, error) {
+	return service.repository.List(ctx, limit)
+}

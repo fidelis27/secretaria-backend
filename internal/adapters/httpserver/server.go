@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -161,6 +162,15 @@ func New(addr string, healthService health.Service, institutionService applicati
 		writeJSON(writer, http.StatusCreated, created)
 	})
 	mux.Handle("GET /events", eventHandler(eventBus))
+	mux.HandleFunc("GET /events/history", func(writer http.ResponseWriter, request *http.Request) {
+		limit, _ := strconv.Atoi(request.URL.Query().Get("limit"))
+		events, err := eventService.List(request.Context(), limit)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not list events")
+			return
+		}
+		writeJSON(writer, http.StatusOK, events)
+	})
 	mux.HandleFunc("GET /enrollments", func(writer http.ResponseWriter, request *http.Request) {
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
