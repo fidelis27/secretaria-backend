@@ -245,7 +245,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		writeJSON(writer, http.StatusCreated, created)
 	})
-	mux.Handle("GET /events", eventHandler(eventBus))
+	mux.Handle("GET /events", eventHandler(eventBus, policy))
 	mux.HandleFunc("GET /metrics", metrics.handler)
 	mux.Handle("GET /events/history", eventHistoryHandler(eventService, policy))
 	mux.HandleFunc("GET /enrollments", func(writer http.ResponseWriter, request *http.Request) {
