@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -235,7 +234,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not create student")
 			return
 		}
-		domainEvent, err := domainevent.New("STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), created)
+		domainEvent, err := domainevent.NewForInstitution("STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), created.InstitutionID, created)
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not create student event")
 			return
@@ -248,15 +247,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 	})
 	mux.Handle("GET /events", eventHandler(eventBus))
 	mux.HandleFunc("GET /metrics", metrics.handler)
-	mux.HandleFunc("GET /events/history", func(writer http.ResponseWriter, request *http.Request) {
-		limit, _ := strconv.Atoi(request.URL.Query().Get("limit"))
-		events, err := eventService.List(request.Context(), limit)
-		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list events")
-			return
-		}
-		writeJSON(writer, http.StatusOK, events)
-	})
+	mux.Handle("GET /events/history", eventHistoryHandler(eventService, policy))
 	mux.HandleFunc("GET /enrollments", func(writer http.ResponseWriter, request *http.Request) {
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
@@ -332,7 +323,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not transfer enrollment")
 			return
 		}
-		domainEvent, err := domainevent.New("STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), map[string]string{
+		domainEvent, err := domainevent.NewForInstitutions("STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID, created.InstitutionID}, map[string]string{
 			"studentId":             request.PathValue("studentId"),
 			"sourceEnrollment":      request.PathValue("enrollmentId"),
 			"destinationEnrollment": created.ID,
@@ -383,7 +374,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not suspend enrollment")
 			return
 		}
-		domainEvent, err := domainevent.New("ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), map[string]string{
+		domainEvent, err := domainevent.NewForInstitution("ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), existing.InstitutionID, map[string]string{
 			"studentId":    request.PathValue("studentId"),
 			"enrollmentId": request.PathValue("enrollmentId"),
 			"reason":       input.Reason,
@@ -421,7 +412,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not reopen enrollment")
 			return
 		}
-		domainEvent, err := domainevent.New("ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), map[string]string{
+		domainEvent, err := domainevent.NewForInstitution("ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), existing.InstitutionID, map[string]string{
 			"studentId":    request.PathValue("studentId"),
 			"enrollmentId": request.PathValue("enrollmentId"),
 		})

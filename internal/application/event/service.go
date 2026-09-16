@@ -34,3 +34,7 @@ func (service Service) Subscribe() (<-chan domainevent.Event, func()) {
 func (service Service) List(ctx context.Context, limit int) ([]domainevent.Event, error) {
 	return service.repository.List(ctx, limit)
 }
+
+func (service Service) ListByInstitutionIDs(ctx context.Context, limit int, institutionIDs []string) ([]domainevent.Event, error) {
+	return service.repository.ListByInstitutionIDs(ctx, limit, institutionIDs)
+}
