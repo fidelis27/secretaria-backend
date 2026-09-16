@@ -18,7 +18,6 @@ import (
 	applicationuser "github.com/fidelis27/secretaria-backend/internal/application/user"
 	domainauthorization "github.com/fidelis27/secretaria-backend/internal/domain/authorization"
 	domainenrollment "github.com/fidelis27/secretaria-backend/internal/domain/enrollment"
-	domainevent "github.com/fidelis27/secretaria-backend/internal/domain/event"
 	domaingroup "github.com/fidelis27/secretaria-backend/internal/domain/group"
 	domaininstitution "github.com/fidelis27/secretaria-backend/internal/domain/institution"
 	domainstudent "github.com/fidelis27/secretaria-backend/internal/domain/student"
@@ -234,12 +233,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not create student")
 			return
 		}
-		domainEvent, err := domainevent.NewForInstitution("STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), created.InstitutionID, created)
-		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create student event")
-			return
-		}
-		if err := eventService.Publish(request.Context(), domainEvent); err != nil {
+		if err := publishDomainEvent(request.Context(), eventService, "STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), []string{created.InstitutionID}, created); err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not publish student event")
 			return
 		}
@@ -323,13 +317,12 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not transfer enrollment")
 			return
 		}
-		domainEvent, err := domainevent.NewForInstitutions("STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID, created.InstitutionID}, map[string]string{
+		if err := publishDomainEvent(request.Context(), eventService, "STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID, created.InstitutionID}, map[string]string{
 			"studentId":             request.PathValue("studentId"),
 			"sourceEnrollment":      request.PathValue("enrollmentId"),
 			"destinationEnrollment": created.ID,
 			"institutionId":         created.InstitutionID,
-		})
-		if err != nil || eventService.Publish(request.Context(), domainEvent) != nil {
+		}); err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not publish transfer event")
 			return
 		}
@@ -374,13 +367,12 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not suspend enrollment")
 			return
 		}
-		domainEvent, err := domainevent.NewForInstitution("ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), existing.InstitutionID, map[string]string{
+		if err := publishDomainEvent(request.Context(), eventService, "ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
 			"studentId":    request.PathValue("studentId"),
 			"enrollmentId": request.PathValue("enrollmentId"),
 			"reason":       input.Reason,
 			"date":         input.Date,
-		})
-		if err != nil || eventService.Publish(request.Context(), domainEvent) != nil {
+		}); err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not publish suspension event")
 			return
 		}
@@ -412,11 +404,10 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeError(writer, http.StatusInternalServerError, "could not reopen enrollment")
 			return
 		}
-		domainEvent, err := domainevent.NewForInstitution("ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), existing.InstitutionID, map[string]string{
+		if err := publishDomainEvent(request.Context(), eventService, "ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
 			"studentId":    request.PathValue("studentId"),
 			"enrollmentId": request.PathValue("enrollmentId"),
-		})
-		if err != nil || eventService.Publish(request.Context(), domainEvent) != nil {
+		}); err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not publish reopening event")
 			return
 		}
