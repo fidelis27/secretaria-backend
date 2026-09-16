@@ -23,7 +23,6 @@ import (
 	domaingroup "github.com/fidelis27/secretaria-backend/internal/domain/group"
 	domaininstitution "github.com/fidelis27/secretaria-backend/internal/domain/institution"
 	domainstudent "github.com/fidelis27/secretaria-backend/internal/domain/student"
-	domainuser "github.com/fidelis27/secretaria-backend/internal/domain/user"
 )
 
 type Server struct {
@@ -85,35 +84,8 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		writeJSON(writer, http.StatusCreated, created)
 	})
-	mux.HandleFunc("GET /users", func(writer http.ResponseWriter, request *http.Request) {
-		users, err := userService.List(request.Context())
-		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list users")
-			return
-		}
-		writeJSON(writer, http.StatusOK, users)
-	})
-	mux.HandleFunc("POST /users", func(writer http.ResponseWriter, request *http.Request) {
-		var input struct {
-			Name       string `json:"name"`
-			Email      string `json:"email"`
-			SuperAdmin bool   `json:"superAdmin"`
-		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
-			writeError(writer, http.StatusBadRequest, "invalid JSON body")
-			return
-		}
-		created, err := userService.Create(request.Context(), input.Name, input.Email, input.SuperAdmin)
-		if errors.Is(err, domainuser.ErrNameRequired) || errors.Is(err, domainuser.ErrEmailRequired) {
-			writeError(writer, http.StatusBadRequest, err.Error())
-			return
-		}
-		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create user")
-			return
-		}
-		writeJSON(writer, http.StatusCreated, created)
-	})
+	mux.Handle("GET /users", userListHandler(userService, policy))
+	mux.Handle("POST /users", userCreateHandler(userService, policy))
 	mux.HandleFunc("GET /groups", func(writer http.ResponseWriter, request *http.Request) {
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
