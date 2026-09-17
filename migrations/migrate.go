@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 )
 
 //go:embed *.sql
@@ -44,9 +45,11 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 		if err != nil {
 			return fmt.Errorf("begin migration %s: %w", entry, err)
 		}
-		if _, err := transaction.ExecContext(ctx, string(contents)); err != nil {
-			_ = transaction.Rollback()
-			return fmt.Errorf("apply migration %s: %w", entry, err)
+		for _, statement := range splitStatements(string(contents)) {
+			if _, err := transaction.ExecContext(ctx, statement); err != nil {
+				_ = transaction.Rollback()
+				return fmt.Errorf("apply migration %s: %w", entry, err)
+			}
 		}
 		if _, err := transaction.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (?)", entry); err != nil {
 			_ = transaction.Rollback()
@@ -57,4 +60,15 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 		}
 	}
 	return nil
+}
+
+func splitStatements(contents string) []string {
+	parts := strings.Split(contents, ";")
+	statements := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if statement := strings.TrimSpace(part); statement != "" {
+			statements = append(statements, statement)
+		}
+	}
+	return statements
 }
