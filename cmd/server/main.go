@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,6 +17,7 @@ import (
 	applicationuser "github.com/fidelis27/secretaria-backend/internal/application/user"
 	"github.com/fidelis27/secretaria-backend/internal/domain/authorization"
 	"github.com/fidelis27/secretaria-backend/internal/platform/config"
+	"github.com/fidelis27/secretaria-backend/migrations"
 )
 
 func main() {
@@ -30,6 +32,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
+	if err := migrations.Apply(context.Background(), database.SQLDB()); err != nil {
+		slog.Error("failed to apply database migrations", "error", err)
+		os.Exit(1)
+	}
 
 	address := fmt.Sprintf("0.0.0.0:%d", appConfig.Port)
 	institutionRepository := mariadb.NewInstitutionRepository(database)

@@ -10,6 +10,7 @@ Na raiz do repositorio:
 ```bash
 go -C modules/backend test ./...
 go -C modules/backend run ./cmd/server
+go -C modules/backend run ./cmd/migrate
 ```
 
 Ou diretamente neste modulo:
@@ -18,6 +19,7 @@ Ou diretamente neste modulo:
 cd modules/backend
 go test ./...
 go run ./cmd/server
+go run ./cmd/migrate
 ```
 
 ## Configuracao
@@ -26,6 +28,11 @@ O servidor le `PORT`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
 `DB_PASSWORD` e `DB_TLS`. A inicializacao abre a conexao MariaDB e valida o
 banco com `PingContext`. O endpoint `GET /health` retorna `200` quando o banco
 esta disponivel e `503` quando a verificacao falha.
+
+As migrations versionadas sao aplicadas com `go run ./cmd/migrate`. O comando
+cria `schema_migrations`, aplica os arquivos SQL em ordem e ignora versoes ja
+registradas. No Render, execute-o no Shell do servico depois de configurar as
+variaveis `DB_*`.
 
 ## Identidade demo
 

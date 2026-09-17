@@ -41,6 +41,10 @@ func (connection *Connection) Close() error {
 	return connection.database.Close()
 }
 
+func (connection *Connection) SQLDB() *sql.DB {
+	return connection.database
+}
+
 func dataSourceName(appConfig config.Config) string {
 	tls := "false"
 	if appConfig.DBTLS {
