@@ -45,6 +45,9 @@ func dataSourceName(appConfig config.Config) string {
 	tls := "false"
 	if appConfig.DBTLS {
 		tls = "true"
+		if appConfig.DBTLSSkipVerify {
+			tls = "skip-verify"
+		}
 	}
 
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&tls=%s",

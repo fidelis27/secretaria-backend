@@ -7,13 +7,14 @@ import (
 )
 
 type Config struct {
-	Port   int
-	DBHost string
-	DBPort int
-	DBName string
-	DBUser string
-	DBPass string
-	DBTLS  bool
+	Port            int
+	DBHost          string
+	DBPort          int
+	DBName          string
+	DBUser          string
+	DBPass          string
+	DBTLS           bool
+	DBTLSSkipVerify bool
 }
 
 func Load() (Config, error) {
@@ -31,15 +32,20 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	dbTLSSkipVerify, err := envBool("DB_TLS_SKIP_VERIFY", false)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
-		Port:   port,
-		DBHost: os.Getenv("DB_HOST"),
-		DBPort: dbPort,
-		DBName: os.Getenv("DB_NAME"),
-		DBUser: os.Getenv("DB_USER"),
-		DBPass: os.Getenv("DB_PASSWORD"),
-		DBTLS:  dbTLS,
+		Port:            port,
+		DBHost:          os.Getenv("DB_HOST"),
+		DBPort:          dbPort,
+		DBName:          os.Getenv("DB_NAME"),
+		DBUser:          os.Getenv("DB_USER"),
+		DBPass:          os.Getenv("DB_PASSWORD"),
+		DBTLS:           dbTLS,
+		DBTLSSkipVerify: dbTLSSkipVerify,
 	}, nil
 }
 
