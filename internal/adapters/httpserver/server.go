@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -445,14 +446,21 @@ func isLocalFrontendOrigin(origin string) bool {
 	}
 	configuredOrigins := os.Getenv("CORS_ORIGINS")
 	if configuredOrigins == "" {
-		configuredOrigins = "http://localhost:4173,http://localhost:4174,http://localhost:4175,http://localhost:4176,http://localhost:4178,http://localhost:4179,http://127.0.0.1:4173,http://127.0.0.1:4174,http://127.0.0.1:4175,http://127.0.0.1:4176,http://127.0.0.1:4178,http://127.0.0.1:4179"
+		configuredOrigins = "http://localhost:4173,http://localhost:4174,http://localhost:4175,http://localhost:4176,http://localhost:4178,http://localhost:4179,http://127.0.0.1:4173,http://127.0.0.1:4174,http://127.0.0.1:4175,http://127.0.0.1:4176,http://127.0.0.1:4178,http://127.0.0.1:4179,https://mfe-communication-host.vercel.app,https://mfe-communication-mfe-activity.vercel.app,https://mfe-communication-mfe-student.vercel.app,https://mfe-communication-mfe-institution.vercel.app,https://mfe-communication-mfe-dashboard.vercel.app,https://mfe-communication-mfe-admin.vercel.app"
 	}
 	for _, configuredOrigin := range strings.Split(configuredOrigins, ",") {
 		if strings.TrimSpace(configuredOrigin) == origin {
 			return true
 		}
 	}
-	return false
+
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil || parsedOrigin.Host == "" {
+		return false
+	}
+
+	host := strings.ToLower(parsedOrigin.Hostname())
+	return host == "vercel.app" || strings.HasSuffix(host, ".vercel.app")
 }
 
 func authorizeInstitutionEdit(writer http.ResponseWriter, request *http.Request, policy domainauthorization.Policy, institutionID string) bool {

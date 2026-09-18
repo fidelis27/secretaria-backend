@@ -31,6 +31,20 @@ func TestIsLocalFrontendOriginUsesLocalDefaults(t *testing.T) {
 	}
 }
 
+func TestIsLocalFrontendOriginAllowsVercelDomains(t *testing.T) {
+	t.Setenv("CORS_ORIGINS", "")
+
+	if !isLocalFrontendOrigin("https://mfe-communication-mfe-student.vercel.app") {
+		t.Fatal("project Vercel domain should be allowed")
+	}
+	if !isLocalFrontendOrigin("https://mfe-communication-mfe-student-git-main-fidelis27s-projects.vercel.app") {
+		t.Fatal("Vercel preview domain should be allowed")
+	}
+	if isLocalFrontendOrigin("https://malicious.example.com") {
+		t.Fatal("non-Vercel origin should be denied")
+	}
+}
+
 func TestCorsMiddlewareHandlesAllowedPreflight(t *testing.T) {
 	handler := corsMiddleware(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		t.Fatal("preflight should not reach the wrapped handler")
