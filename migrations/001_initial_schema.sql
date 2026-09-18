@@ -41,7 +41,7 @@ CREATE TABLE enrollments (
         REFERENCES institutions (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE groups (
+CREATE TABLE `groups` (
     id VARCHAR(64) NOT NULL PRIMARY KEY,
     institution_id VARCHAR(64) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -58,5 +58,5 @@ CREATE TABLE member_groups (
     CONSTRAINT fk_member_groups_user FOREIGN KEY (user_id)
         REFERENCES users (id),
     CONSTRAINT fk_member_groups_group FOREIGN KEY (group_id)
-        REFERENCES groups (id)
+        REFERENCES `groups` (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

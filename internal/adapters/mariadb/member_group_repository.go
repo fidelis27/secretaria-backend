@@ -17,9 +17,8 @@ func NewMemberGroupRepository(connection *Connection) MemberGroupRepository {
 }
 
 func (repository MemberGroupRepository) ListInstitutionIDsByUser(ctx context.Context, userID string) ([]string, error) {
-	rows, err := repository.connection.database.QueryContext(ctx,
-		`SELECT DISTINCT g.institution_id FROM member_groups mg INNER JOIN groups g ON g.id = mg.group_id WHERE mg.user_id = ?`, userID,
-	)
+	query := `SELECT DISTINCT g.institution_id FROM member_groups mg INNER JOIN ` + groupsTable + ` g ON g.id = mg.group_id WHERE mg.user_id = ?`
+	rows, err := repository.connection.database.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list visible institutions: %w", err)
 	}
@@ -39,12 +38,10 @@ func (repository MemberGroupRepository) ListInstitutionIDsByUser(ctx context.Con
 }
 
 func (repository MemberGroupRepository) FindByUserAndInstitution(ctx context.Context, userID string, institutionID string) ([]domainauthorization.Membership, error) {
-	rows, err := repository.connection.database.QueryContext(ctx,
-		`SELECT mg.user_id, mg.group_id, g.institution_id, mg.role
-		 FROM member_groups mg
-		 INNER JOIN groups g ON g.id = mg.group_id
-		 WHERE mg.user_id = ? AND g.institution_id = ?`, userID, institutionID,
-	)
+	query := `SELECT mg.user_id, mg.group_id, g.institution_id, mg.role
+FROM member_groups mg INNER JOIN ` + groupsTable + ` g ON g.id = mg.group_id
+WHERE mg.user_id = ? AND g.institution_id = ?`
+	rows, err := repository.connection.database.QueryContext(ctx, query, userID, institutionID)
 	if err != nil {
 		return nil, fmt.Errorf("find memberships by institution: %w", err)
 	}
@@ -66,12 +63,11 @@ func (repository MemberGroupRepository) FindByUserAndInstitution(ctx context.Con
 
 func (repository MemberGroupRepository) FindByUserAndGroup(ctx context.Context, userID string, groupID string) (domainauthorization.Membership, bool, error) {
 	var membership domainauthorization.Membership
-	err := repository.connection.database.QueryRowContext(ctx,
-		`SELECT mg.user_id, mg.group_id, g.institution_id, mg.role
-		 FROM member_groups mg
-		 INNER JOIN groups g ON g.id = mg.group_id
-		 WHERE mg.user_id = ? AND mg.group_id = ?`, userID, groupID,
-	).Scan(&membership.UserID, &membership.GroupID, &membership.InstitutionID, &membership.Role)
+	query := `SELECT mg.user_id, mg.group_id, g.institution_id, mg.role
+FROM member_groups mg INNER JOIN ` + groupsTable + ` g ON g.id = mg.group_id
+WHERE mg.user_id = ? AND mg.group_id = ?`
+	err := repository.connection.database.QueryRowContext(ctx, query, userID, groupID).
+		Scan(&membership.UserID, &membership.GroupID, &membership.InstitutionID, &membership.Role)
 	if err == sql.ErrNoRows {
 		return domainauthorization.Membership{}, false, nil
 	}
