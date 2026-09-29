@@ -22,6 +22,7 @@ import (
 	domaingroup "github.com/fidelis27/secretaria-backend/internal/domain/group"
 	domaininstitution "github.com/fidelis27/secretaria-backend/internal/domain/institution"
 	domainstudent "github.com/fidelis27/secretaria-backend/internal/domain/student"
+	apperrors "github.com/fidelis27/secretaria-backend/internal/platform/errors"
 )
 
 type Server struct {
@@ -35,7 +36,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		writer.Header().Set("Content-Type", "application/json")
 		status := healthService.Check(request.Context())
 		if !status.OK {
-			writer.WriteHeader(http.StatusServiceUnavailable)
+			writer.WriteHeader(http.StatusFailedDependency)
 		}
 		_ = json.NewEncoder(writer).Encode(status)
 	})
@@ -53,7 +54,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			institutions, err = institutionService.ListByIDs(request.Context(), institutionIDs)
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list institutions")
+			writeServiceError(writer, err, "could not list institutions")
 			return
 		}
 		writeJSON(writer, http.StatusOK, institutions)
@@ -89,7 +90,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not resolve group scope")
+			writeServiceError(writer, err, "could not resolve group scope")
 			return
 		}
 		var groups []domaingroup.Group
@@ -99,7 +100,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			groups, err = groupService.ListByInstitutionIDs(request.Context(), institutionIDs)
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list groups")
+			writeServiceError(writer, err, "could not list groups")
 			return
 		}
 		writeJSON(writer, http.StatusOK, groups)
@@ -198,7 +199,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not resolve institution scope")
+			writeServiceError(writer, err, "could not resolve institution scope")
 			return
 		}
 		var students []domainstudent.Student
@@ -208,7 +209,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			students, err = studentService.ListByInstitutionIDs(request.Context(), institutionIDs)
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list students")
+			writeServiceError(writer, err, "could not list students")
 			return
 		}
 		writeJSON(writer, http.StatusOK, students)
@@ -247,7 +248,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not resolve institution scope")
+			writeServiceError(writer, err, "could not resolve institution scope")
 			return
 		}
 		var enrollments []domainenrollment.Enrollment
@@ -257,7 +258,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			enrollments, err = enrollmentService.ListByInstitutionIDs(request.Context(), institutionIDs)
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list enrollments")
+			writeServiceError(writer, err, "could not list enrollments")
 			return
 		}
 		writeJSON(writer, http.StatusOK, enrollments)
@@ -489,6 +490,14 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 
 func writeError(writer http.ResponseWriter, status int, message string) {
 	writeJSON(writer, status, map[string]string{"error": message})
+}
+
+func writeServiceError(writer http.ResponseWriter, err error, fallback string) {
+	if apperrors.IsDatabaseUnavailable(err) {
+		writeError(writer, http.StatusFailedDependency, apperrors.ErrDatabaseUnavailable.Error())
+		return
+	}
+	writeError(writer, http.StatusInternalServerError, fallback)
 }
 
 func (server *Server) ListenAndServe() error {
