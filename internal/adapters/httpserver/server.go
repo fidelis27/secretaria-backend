@@ -29,7 +29,7 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy) *Server {
+func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy, verifier identityTokenVerifier) *Server {
 	mux := http.NewServeMux()
 	metrics := newRequestMetrics()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
@@ -419,7 +419,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 	return &Server{
 		httpServer: &http.Server{
 			Addr:    addr,
-			Handler: observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService)), slog.Default(), metrics),
+			Handler: observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService, verifier)), slog.Default(), metrics),
 		},
 	}
 }
@@ -430,7 +430,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		if isLocalFrontendOrigin(origin) {
 			writer.Header().Set("Access-Control-Allow-Origin", origin)
 			writer.Header().Set("Vary", "Origin")
-			writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, x-demo-user, x-correlation-id")
+			writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Sec-WebSocket-Protocol, x-correlation-id")
 			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		}
 		if request.Method == http.MethodOptions {

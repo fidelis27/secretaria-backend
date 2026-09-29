@@ -36,6 +36,10 @@ func (service Service) FindByID(ctx context.Context, id string) (domainuser.User
 	return service.repository.FindByID(ctx, id)
 }
 
+func (service Service) FindByEmail(ctx context.Context, email string) (domainuser.User, bool, error) {
+	return service.repository.FindByEmail(ctx, strings.TrimSpace(email))
+}
+
 func newID() string {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {

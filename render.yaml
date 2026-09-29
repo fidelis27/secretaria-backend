@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: secretaria-api
+    runtime: go
+    buildCommand: go build -o bin/server ./cmd/server
+    startCommand: ./bin/server
+    healthCheckPath: /health
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_TLS
+        value: "true"
+      - key: KEYCLOAK_ISSUER
+        sync: false
+      - key: KEYCLOAK_CLIENT_ID
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

@@ -30,6 +30,10 @@ func (*userHandlerRepository) FindByID(context.Context, string) (domainuser.User
 	return domainuser.User{}, false, nil
 }
 
+func (*userHandlerRepository) FindByEmail(context.Context, string) (domainuser.User, bool, error) {
+	return domainuser.User{}, false, nil
+}
+
 type userHandlerMemberships struct{}
 
 func (userHandlerMemberships) ListInstitutionIDsByUser(context.Context, string) ([]string, error) {

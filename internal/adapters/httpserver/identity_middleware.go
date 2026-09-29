@@ -11,22 +11,41 @@ import (
 
 type identityContextKey struct{}
 
-func identityMiddleware(next http.Handler, users applicationuser.Service) http.Handler {
+type identityClaimsContextKey struct{}
+
+type IdentityClaims struct {
+	Subject       string   `json:"sub"`
+	Email         string   `json:"email"`
+	EmailVerified bool     `json:"email_verified"`
+	Username      string   `json:"preferred_username"`
+	Roles         []string `json:"roles"`
+	RealmAccess   struct {
+		Roles []string `json:"roles"`
+	} `json:"realm_access"`
+}
+
+type identityTokenVerifier interface {
+	Verify(context.Context, string) (IdentityClaims, error)
+}
+
+func identityMiddleware(next http.Handler, users applicationuser.Service, verifier identityTokenVerifier) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			next.ServeHTTP(writer, request)
 			return
 		}
 
-		userID := strings.TrimSpace(request.Header.Get("x-demo-user"))
-		if userID == "" && websocketRequest(request) {
-			userID = strings.TrimSpace(request.URL.Query().Get("demoUser"))
-		}
-		if userID == "" {
+		token := bearerToken(request)
+		if token == "" {
 			writeError(writer, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		user, found, err := users.FindByID(request.Context(), userID)
+		claims, err := verifier.Verify(request.Context(), token)
+		if err != nil || !claims.EmailVerified || strings.TrimSpace(claims.Email) == "" {
+			writeError(writer, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		user, found, err := users.FindByEmail(request.Context(), strings.TrimSpace(claims.Email))
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not load user")
 			return
@@ -35,10 +54,40 @@ func identityMiddleware(next http.Handler, users applicationuser.Service) http.H
 			writeError(writer, http.StatusForbidden, "forbidden")
 			return
 		}
+		user.SuperAdmin = user.SuperAdmin && (hasRole(claims.Roles, "super_admin") || hasRole(claims.RealmAccess.Roles, "super_admin"))
 
-		request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, user))
+		ctx := context.WithValue(request.Context(), identityContextKey{}, user)
+		ctx = context.WithValue(ctx, identityClaimsContextKey{}, claims)
+		request = request.WithContext(ctx)
 		next.ServeHTTP(writer, request)
 	})
+}
+
+func bearerToken(request *http.Request) string {
+	if header := strings.TrimSpace(request.Header.Get("Authorization")); header != "" {
+		parts := strings.SplitN(header, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return strings.TrimSpace(parts[1])
+		}
+	}
+	if websocketRequest(request) {
+		for _, protocol := range strings.Split(request.Header.Get("Sec-WebSocket-Protocol"), ",") {
+			protocol = strings.TrimSpace(protocol)
+			if strings.HasPrefix(protocol, "bearer.") {
+				return strings.TrimPrefix(protocol, "bearer.")
+			}
+		}
+	}
+	return ""
+}
+
+func hasRole(roles []string, expected string) bool {
+	for _, role := range roles {
+		if role == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func websocketRequest(request *http.Request) bool {
@@ -48,4 +97,9 @@ func websocketRequest(request *http.Request) bool {
 func userFromContext(ctx context.Context) (domainuser.User, bool) {
 	user, ok := ctx.Value(identityContextKey{}).(domainuser.User)
 	return user, ok
+}
+
+func identityClaimsFromContext(ctx context.Context) (IdentityClaims, bool) {
+	claims, ok := ctx.Value(identityClaimsContextKey{}).(IdentityClaims)
+	return claims, ok
 }

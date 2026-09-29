@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/fidelis27/secretaria-backend/internal/adapters/httpserver"
+	"github.com/fidelis27/secretaria-backend/internal/adapters/keycloak"
 	"github.com/fidelis27/secretaria-backend/internal/adapters/mariadb"
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
 	applicationevent "github.com/fidelis27/secretaria-backend/internal/application/event"
@@ -38,6 +39,11 @@ func main() {
 	}
 
 	address := fmt.Sprintf("0.0.0.0:%d", appConfig.Port)
+	identityVerifier, err := keycloak.NewVerifier(context.Background(), appConfig.KeycloakIssuer, appConfig.KeycloakClientID)
+	if err != nil {
+		slog.Error("failed to initialize Keycloak verifier", "error", err)
+		os.Exit(1)
+	}
 	institutionRepository := mariadb.NewInstitutionRepository(database)
 	institutionService := applicationinstitution.NewService(institutionRepository)
 	userRepository := mariadb.NewUserRepository(database)
@@ -54,7 +60,7 @@ func main() {
 	groupRepository := mariadb.NewGroupRepository(database)
 	groupService := applicationgroup.NewService(groupRepository)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, groupService, policy)
+	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, groupService, policy, identityVerifier)
 	slog.Info("server listening", "address", address)
 	if err := server.ListenAndServe(); err != nil {
 		slog.Error("server stopped", "error", err)

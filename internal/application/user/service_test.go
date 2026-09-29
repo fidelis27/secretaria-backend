@@ -24,6 +24,10 @@ func (*repositoryStub) FindByID(context.Context, string) (domainuser.User, bool,
 	return domainuser.User{}, false, nil
 }
 
+func (*repositoryStub) FindByEmail(context.Context, string) (domainuser.User, bool, error) {
+	return domainuser.User{}, false, nil
+}
+
 func TestServiceCreatesActiveUser(t *testing.T) {
 	repository := &repositoryStub{}
 	created, err := NewService(repository).Create(context.Background(), "  Ana Souza  ", "  ana@example.com  ", true)

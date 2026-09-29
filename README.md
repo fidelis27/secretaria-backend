@@ -1,22 +1,11 @@
 # Secretaria Backend
 
-Backend Go isolado em um modulo proprio para manter a possibilidade de
-extracao futura para outro repositorio sem reorganizar o restante do monorepo.
+API Go da Secretaria Escolar. Este repositorio contem o backend e suas migrations;
+os frontends ficam no repositorio `mfe-communication`.
 
 ## Comandos
 
-Na raiz do repositorio:
-
 ```bash
-go -C modules/backend test ./...
-go -C modules/backend run ./cmd/server
-go -C modules/backend run ./cmd/migrate
-```
-
-Ou diretamente neste modulo:
-
-```bash
-cd modules/backend
 go test ./...
 go run ./cmd/server
 go run ./cmd/migrate
@@ -25,8 +14,9 @@ go run ./cmd/migrate
 ## Configuracao
 
 O servidor le `PORT`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
-`DB_PASSWORD` e `DB_TLS`. A inicializacao abre a conexao MariaDB e valida o
-banco com `PingContext`. O endpoint `GET /health` retorna `200` quando o banco
+`DB_PASSWORD`, `DB_TLS`, `KEYCLOAK_ISSUER` e `KEYCLOAK_CLIENT_ID`. Configure o
+issuer OIDC do realm Keycloak e o client usado pela API. A inicializacao valida
+o issuer e baixa a configuracao JWKS; `GET /health` retorna `200` quando o banco
 esta disponivel e `503` quando a verificacao falha.
 
 As migrations versionadas sao aplicadas com `go run ./cmd/migrate`. O comando
@@ -34,25 +24,27 @@ cria `schema_migrations`, aplica os arquivos SQL em ordem e ignora versoes ja
 registradas. No Render, execute-o no Shell do servico depois de configurar as
 variaveis `DB_*`.
 
-## Identidade demo
+## Autenticacao e autorizacao
 
-Com excecao de `GET /health` e `POST /users`, as rotas exigem o header
-`x-demo-user` com o ID de um usuario ativo persistido no banco:
+Todas as rotas, exceto `GET /health`, exigem access token Keycloak no header
+Bearer. O backend valida assinatura, issuer, audience e expiracao via OIDC/JWKS,
+exige e-mail verificado e associa o e-mail a um usuario ativo no banco. O papel
+`super_admin` precisa existir tanto na role do realm quanto no cadastro local.
 
 ```bash
-curl -H "x-demo-user: <user-id>" http://localhost:3333/institutions
+curl -H "Authorization: Bearer <access-token>" http://localhost:3333/institutions
 ```
 
-Sem o header a API retorna `401`. Usuarios inexistentes ou inativos recebem
-`403`. Esse mecanismo e somente para demonstracao local.
+Sem token valido a API retorna `401`; usuarios sem cadastro ativo recebem `403`.
 
 ## Eventos
 
-O WebSocket `GET /events` exige o mesmo `x-demo-user` e transmite eventos com
+O WebSocket `GET /events` exige token no subprotocolo `bearer.<access-token>` e transmite eventos com
 `eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` e
 `payload`. Eventos sao persistidos em `audit_events` antes da distribuicao.
 
-## Guia local
+## Desenvolvimento local
 
-O passo a passo para iniciar XAMPP/MariaDB, aplicar migrations, acessar o
-phpMyAdmin e subir a API esta em [`docs/local-development.md`](../../docs/local-development.md).
+Inicie MariaDB, configure as variaveis `DB_*` e `KEYCLOAK_*`, aplique as
+migrations e execute `go run ./cmd/server`. O guia do monorepo
+`mfe-communication` documenta a inicializacao coordenada dos MFEs e desta API.

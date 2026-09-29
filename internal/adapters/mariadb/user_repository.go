@@ -63,3 +63,17 @@ func (repository UserRepository) FindByID(ctx context.Context, id string) (domai
 	}
 	return entity, true, nil
 }
+
+func (repository UserRepository) FindByEmail(ctx context.Context, email string) (domainuser.User, bool, error) {
+	var entity domainuser.User
+	err := repository.connection.database.QueryRowContext(ctx,
+		`SELECT id, name, email, status, super_admin FROM users WHERE email = ?`, email,
+	).Scan(&entity.ID, &entity.Name, &entity.Email, &entity.Status, &entity.SuperAdmin)
+	if err == sql.ErrNoRows {
+		return domainuser.User{}, false, nil
+	}
+	if err != nil {
+		return domainuser.User{}, false, fmt.Errorf("find user by email: %w", err)
+	}
+	return entity, true, nil
+}
