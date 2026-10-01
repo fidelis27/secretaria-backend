@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/fidelis27/secretaria-backend/internal/adapters/httpserver"
-	"github.com/fidelis27/secretaria-backend/internal/adapters/keycloak"
 	"github.com/fidelis27/secretaria-backend/internal/adapters/mariadb"
+	oidcverifier "github.com/fidelis27/secretaria-backend/internal/adapters/oidc"
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
 	applicationevent "github.com/fidelis27/secretaria-backend/internal/application/event"
 	applicationgroup "github.com/fidelis27/secretaria-backend/internal/application/group"
@@ -39,9 +39,9 @@ func main() {
 	}
 
 	address := fmt.Sprintf("0.0.0.0:%d", appConfig.Port)
-	identityVerifier, err := keycloak.NewVerifier(context.Background(), appConfig.KeycloakIssuer, appConfig.KeycloakClientID)
+	identityVerifier, err := oidcverifier.NewVerifier(context.Background(), appConfig.OIDCIssuer, appConfig.OIDCAudience)
 	if err != nil {
-		slog.Error("failed to initialize Keycloak verifier", "error", err)
+		slog.Error("failed to initialize OIDC verifier", "error", err)
 		os.Exit(1)
 	}
 	institutionRepository := mariadb.NewInstitutionRepository(database)
