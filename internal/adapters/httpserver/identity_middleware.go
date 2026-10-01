@@ -17,11 +17,10 @@ type IdentityClaims struct {
 	Subject       string   `json:"sub"`
 	Email         string   `json:"email"`
 	EmailVerified bool     `json:"email_verified"`
-	Username      string   `json:"preferred_username"`
 	Roles         []string `json:"roles"`
-	RealmAccess   struct {
+	AppMetadata   struct {
 		Roles []string `json:"roles"`
-	} `json:"realm_access"`
+	} `json:"app_metadata"`
 }
 
 type identityTokenVerifier interface {
@@ -41,7 +40,7 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 			return
 		}
 		claims, err := verifier.Verify(request.Context(), token)
-		if err != nil || !claims.EmailVerified || strings.TrimSpace(claims.Email) == "" {
+		if err != nil || strings.TrimSpace(claims.Subject) == "" || strings.TrimSpace(claims.Email) == "" || !claims.EmailVerified {
 			writeError(writer, http.StatusUnauthorized, "unauthorized")
 			return
 		}
@@ -54,7 +53,7 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 			writeError(writer, http.StatusForbidden, "forbidden")
 			return
 		}
-		user.SuperAdmin = user.SuperAdmin && (hasRole(claims.Roles, "super_admin") || hasRole(claims.RealmAccess.Roles, "super_admin"))
+		user.SuperAdmin = user.SuperAdmin && hasIdentityRole(claims, "super_admin")
 
 		ctx := context.WithValue(request.Context(), identityContextKey{}, user)
 		ctx = context.WithValue(ctx, identityClaimsContextKey{}, claims)
@@ -88,6 +87,11 @@ func hasRole(roles []string, expected string) bool {
 		}
 	}
 	return false
+}
+
+func hasIdentityRole(claims IdentityClaims, expected string) bool {
+	return hasRole(claims.Roles, expected) ||
+		hasRole(claims.AppMetadata.Roles, expected)
 }
 
 func websocketRequest(request *http.Request) bool {

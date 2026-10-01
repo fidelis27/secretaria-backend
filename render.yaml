@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: secretaria-api
+    name: secretaria-backend
     runtime: go
-    buildCommand: go build -o bin/server ./cmd/server
-    startCommand: ./bin/server
+    buildCommand: go build -o app ./cmd/server
+    startCommand: ./app
     healthCheckPath: /health
     envVars:
       - key: DB_HOST
@@ -18,9 +18,9 @@ services:
         sync: false
       - key: DB_TLS
         value: "true"
-      - key: KEYCLOAK_ISSUER
+      - key: OIDC_ISSUER
         sync: false
-      - key: KEYCLOAK_CLIENT_ID
-        sync: false
+      - key: OIDC_AUDIENCE
+        value: authenticated
       - key: CORS_ORIGINS
         sync: false

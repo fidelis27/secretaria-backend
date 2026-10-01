@@ -7,16 +7,16 @@ import (
 )
 
 type Config struct {
-	Port             int
-	DBHost           string
-	DBPort           int
-	DBName           string
-	DBUser           string
-	DBPass           string
-	DBTLS            bool
-	DBTLSSkipVerify  bool
-	KeycloakIssuer   string
-	KeycloakClientID string
+	Port            int
+	DBHost          string
+	DBPort          int
+	DBName          string
+	DBUser          string
+	DBPass          string
+	DBTLS           bool
+	DBTLSSkipVerify bool
+	OIDCIssuer      string
+	OIDCAudience    string
 }
 
 func Load() (Config, error) {
@@ -40,17 +40,24 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Port:             port,
-		DBHost:           os.Getenv("DB_HOST"),
-		DBPort:           dbPort,
-		DBName:           os.Getenv("DB_NAME"),
-		DBUser:           os.Getenv("DB_USER"),
-		DBPass:           os.Getenv("DB_PASSWORD"),
-		DBTLS:            dbTLS,
-		DBTLSSkipVerify:  dbTLSSkipVerify,
-		KeycloakIssuer:   os.Getenv("KEYCLOAK_ISSUER"),
-		KeycloakClientID: os.Getenv("KEYCLOAK_CLIENT_ID"),
+		Port:            port,
+		DBHost:          os.Getenv("DB_HOST"),
+		DBPort:          dbPort,
+		DBName:          os.Getenv("DB_NAME"),
+		DBUser:          os.Getenv("DB_USER"),
+		DBPass:          os.Getenv("DB_PASSWORD"),
+		DBTLS:           dbTLS,
+		DBTLSSkipVerify: dbTLSSkipVerify,
+		OIDCIssuer:      os.Getenv("OIDC_ISSUER"),
+		OIDCAudience:    envString("OIDC_AUDIENCE", "authenticated"),
 	}, nil
+}
+
+func envString(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func envInt(name string, fallback int) (int, error) {

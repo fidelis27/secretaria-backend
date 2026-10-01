@@ -59,14 +59,14 @@ func TestIdentityMiddlewareRejectsUnknownAndInactiveUsers(t *testing.T) {
 	users := identityRepository{users: map[string]domainuser.User{
 		"inactive": {ID: "inactive", Email: "inactive@example.com", Status: "inactive"},
 	}}
-	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Email: "unknown@example.com", EmailVerified: true}})
+	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: "unknown@example.com", EmailVerified: true}})
 
 	for _, email := range []string{"unknown@example.com", "inactive@example.com"} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/institutions", nil)
 		request.Header.Set("Authorization", "Bearer test-token")
 		if email == "inactive@example.com" {
-			handler = identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Email: email, EmailVerified: true}})
+			handler = identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: email, EmailVerified: true}})
 		}
 		handler.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusForbidden {
@@ -82,16 +82,27 @@ func TestIdentityMiddlewarePassesActiveUserAndPublicRoutes(t *testing.T) {
 	called := false
 	handler := identityMiddleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		called = true
+		user, userOK := userFromContext(request.Context())
 		if request.URL.Path != "/health" {
-			if _, ok := userFromContext(request.Context()); !ok {
+			if !userOK {
 				t.Error("active user missing from context")
+			}
+			if !user.SuperAdmin {
+				t.Error("Supabase app_metadata role did not enable local superadmin")
 			}
 			if _, ok := identityClaimsFromContext(request.Context()); !ok {
 				t.Error("identity claims missing from context")
 			}
 		}
 		writer.WriteHeader(http.StatusNoContent)
-	}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: "active@example.com", EmailVerified: true, Roles: []string{"super_admin"}}})
+	}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{
+		Subject:       "subject",
+		Email:         "active@example.com",
+		EmailVerified: true,
+		AppMetadata: struct {
+			Roles []string `json:"roles"`
+		}{Roles: []string{"super_admin"}},
+	}})
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/institutions", nil)
@@ -105,6 +116,25 @@ func TestIdentityMiddlewarePassesActiveUserAndPublicRoutes(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health", nil))
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("health status = %d, want %d", recorder.Code, http.StatusNoContent)
+	}
+}
+
+func TestIdentityMiddlewareRejectsUnverifiedEmail(t *testing.T) {
+	users := identityRepository{users: map[string]domainuser.User{
+		"active": {ID: "active", Email: "active@example.com", Status: "active"},
+	}}
+	handler := identityMiddleware(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		applicationuser.NewService(users),
+		staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: "active@example.com"}},
+	)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/institutions", nil)
+	request.Header.Set("Authorization", "******")
+
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unverified email status = %d, want %d", recorder.Code, http.StatusUnauthorized)
 	}
 }
 
