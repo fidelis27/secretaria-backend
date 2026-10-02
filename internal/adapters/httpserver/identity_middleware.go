@@ -14,21 +14,12 @@ type identityContextKey struct{}
 type identityClaimsContextKey struct{}
 
 type IdentityClaims struct {
-	Subject       string   `json:"sub"`
-	Email         string   `json:"email"`
-	EmailVerified bool     `json:"email_verified"`
-	Roles         []string `json:"roles"`
-	UserMetadata  struct {
-		EmailVerified bool `json:"email_verified"`
-	} `json:"user_metadata"`
+	Subject     string   `json:"sub"`
+	Email       string   `json:"email"`
+	Roles       []string `json:"roles"`
 	AppMetadata struct {
 		Roles []string `json:"roles"`
 	} `json:"app_metadata"`
-}
-
-// Supabase reports email verification inside user_metadata.
-func (claims IdentityClaims) emailVerified() bool {
-	return claims.EmailVerified || claims.UserMetadata.EmailVerified
 }
 
 type identityTokenVerifier interface {
@@ -48,7 +39,7 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 			return
 		}
 		claims, err := verifier.Verify(request.Context(), token)
-		if err != nil || strings.TrimSpace(claims.Subject) == "" || strings.TrimSpace(claims.Email) == "" || !claims.emailVerified() {
+		if err != nil || strings.TrimSpace(claims.Subject) == "" || strings.TrimSpace(claims.Email) == "" {
 			writeError(writer, http.StatusUnauthorized, "unauthorized")
 			return
 		}

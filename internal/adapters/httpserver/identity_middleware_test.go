@@ -59,14 +59,14 @@ func TestIdentityMiddlewareRejectsUnknownAndInactiveUsers(t *testing.T) {
 	users := identityRepository{users: map[string]domainuser.User{
 		"inactive": {ID: "inactive", Email: "inactive@example.com", Status: "inactive"},
 	}}
-	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: "unknown@example.com", EmailVerified: true}})
+	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: "unknown@example.com"}})
 
 	for _, email := range []string{"unknown@example.com", "inactive@example.com"} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/institutions", nil)
 		request.Header.Set("Authorization", "Bearer test-token")
 		if email == "inactive@example.com" {
-			handler = identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: email, EmailVerified: true}})
+			handler = identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: email}})
 		}
 		handler.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusForbidden {
@@ -96,9 +96,8 @@ func TestIdentityMiddlewarePassesActiveUserAndPublicRoutes(t *testing.T) {
 		}
 		writer.WriteHeader(http.StatusNoContent)
 	}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{
-		Subject:       "subject",
-		Email:         "active@example.com",
-		EmailVerified: true,
+		Subject: "subject",
+		Email:   "active@example.com",
 		AppMetadata: struct {
 			Roles []string `json:"roles"`
 		}{Roles: []string{"super_admin"}},
@@ -119,22 +118,24 @@ func TestIdentityMiddlewarePassesActiveUserAndPublicRoutes(t *testing.T) {
 	}
 }
 
-func TestIdentityMiddlewareRejectsUnverifiedEmail(t *testing.T) {
+func TestIdentityMiddlewareAllowsTokensWithoutEmailVerificationClaim(t *testing.T) {
 	users := identityRepository{users: map[string]domainuser.User{
 		"active": {ID: "active", Email: "active@example.com", Status: "active"},
 	}}
 	handler := identityMiddleware(
-		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			writer.WriteHeader(http.StatusNoContent)
+		}),
 		applicationuser.NewService(users),
 		staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: "active@example.com"}},
 	)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/institutions", nil)
-	request.Header.Set("Authorization", "******")
+	request.Header.Set("Authorization", "Bearer test-token")
 
 	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("unverified email status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNoContent)
 	}
 }
 
@@ -147,3 +148,4 @@ func TestIdentityMiddlewareProtectsUserCreation(t *testing.T) {
 		t.Fatalf("user creation status = %d, want %d", recorder.Code, http.StatusUnauthorized)
 	}
 }
+

@@ -45,8 +45,10 @@ novos ambientes, sendo substituida por `BOOTSTRAP_SUPER_ADMIN_EMAIL`.
 Todas as rotas, exceto `GET /health`, exigem access token Supabase no header
 Bearer. O backend valida assinatura, issuer, audience e expiracao via OIDC/JWKS
 e associa o subject/e-mail do token a um usuario ativo no banco. Desabilite o
-cadastro publico no Supabase e mantenha a confirmacao de e-mail habilitada;
-provisione apenas contas verificadas que correspondam a usuarios ativos locais.
+cadastro publico no Supabase: o backend nao exige mais `email_verified`, porque
+o Supabase nao envia esse claim de forma confiavel no topo do token e
+`user_metadata` e editavel pelo proprio usuario. Provisione apenas contas que
+correspondam a usuarios ativos locais.
 Para conceder `super_admin`, configure `app_metadata.roles` no Supabase e a
 marca local de superadmin; ambas precisam estar presentes.
 
