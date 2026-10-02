@@ -1,12 +1,15 @@
 package httpserver
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	domainuser "github.com/fidelis27/secretaria-backend/internal/domain/user"
 )
 
 func TestObservabilityMiddlewareRecordsRequestMetrics(t *testing.T) {
@@ -52,5 +55,30 @@ func TestMetricsHandlerExposesPrometheusValues(t *testing.T) {
 		if !strings.Contains(recorder.Body.String(), expected) {
 			t.Errorf("metrics response does not contain %q", expected)
 		}
+	}
+}
+
+func TestMetricsHandlerRequiresSuperAdmin(t *testing.T) {
+	metrics := newRequestMetrics()
+	handler := metricsHandler(metrics)
+
+	for _, test := range []struct {
+		name       string
+		user       domainuser.User
+		wantStatus int
+	}{
+		{name: "regular user", user: domainuser.User{ID: "user-1", Status: "active"}, wantStatus: http.StatusForbidden},
+		{name: "superadmin", user: domainuser.User{ID: "user-2", Status: "active", SuperAdmin: true}, wantStatus: http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, test.user))
+
+			handler.ServeHTTP(recorder, request)
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+		})
 	}
 }

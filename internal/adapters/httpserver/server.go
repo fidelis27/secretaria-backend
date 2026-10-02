@@ -3,9 +3,9 @@ package httpserver
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -32,14 +32,7 @@ type Server struct {
 func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy, verifier identityTokenVerifier) *Server {
 	mux := http.NewServeMux()
 	metrics := newRequestMetrics()
-	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		status := healthService.Check(request.Context())
-		if !status.OK {
-			writer.WriteHeader(http.StatusFailedDependency)
-		}
-		_ = json.NewEncoder(writer).Encode(status)
-	})
+	mux.Handle("GET /health", healthHandler(healthService))
 	mux.HandleFunc("GET /institutions", func(writer http.ResponseWriter, request *http.Request) {
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
@@ -64,7 +57,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			Name string `json:"name"`
 			CNPJ string `json:"cnpj"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -79,7 +72,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create institution")
+			writeServiceError(writer, err, "could not create institution")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
@@ -114,7 +107,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		var input struct {
 			InstitutionID string `json:"institutionId"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -124,7 +117,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create group")
+			writeServiceError(writer, err, "could not create group")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
@@ -151,7 +144,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		memberships, err := groupService.ListMemberships(request.Context(), group.ID)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list memberships")
+			writeServiceError(writer, err, "could not list memberships")
 			return
 		}
 		writeJSON(writer, http.StatusOK, memberships)
@@ -180,7 +173,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			UserID string                   `json:"userId"`
 			Role   domainauthorization.Role `json:"role"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -190,7 +183,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create membership")
+			writeServiceError(writer, err, "could not create membership")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
@@ -219,7 +212,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			Name          string `json:"name"`
 			InstitutionID string `json:"institutionId"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -232,7 +225,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create student")
+			writeServiceError(writer, err, "could not create student")
 			return
 		}
 		if err := publishDomainEvent(request.Context(), eventService, "STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), []string{created.InstitutionID}, created); err != nil {
@@ -242,7 +235,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		writeJSON(writer, http.StatusCreated, created)
 	})
 	mux.Handle("GET /events", eventHandler(eventBus, policy))
-	mux.HandleFunc("GET /metrics", metrics.handler)
+	mux.Handle("GET /metrics", metricsHandler(metrics))
 	mux.Handle("GET /events/history", eventHistoryHandler(eventService, policy))
 	mux.HandleFunc("GET /enrollments", func(writer http.ResponseWriter, request *http.Request) {
 		user, _ := userFromContext(request.Context())
@@ -268,7 +261,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			StudentID     string `json:"studentId"`
 			InstitutionID string `json:"institutionId"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -281,7 +274,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create enrollment")
+			writeServiceError(writer, err, "could not create enrollment")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
@@ -290,7 +283,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		var input struct {
 			InstitutionID string `json:"institutionId"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -316,7 +309,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not transfer enrollment")
+			writeServiceError(writer, err, "could not transfer enrollment")
 			return
 		}
 		if err := publishDomainEvent(request.Context(), eventService, "STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID, created.InstitutionID}, map[string]string{
@@ -335,7 +328,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			Reason string `json:"reason"`
 			Date   string `json:"date"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -366,7 +359,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not suspend enrollment")
+			writeServiceError(writer, err, "could not suspend enrollment")
 			return
 		}
 		if err := publishDomainEvent(request.Context(), eventService, "ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
@@ -403,7 +396,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not reopen enrollment")
+			writeServiceError(writer, err, "could not reopen enrollment")
 			return
 		}
 		if err := publishDomainEvent(request.Context(), eventService, "ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
@@ -417,10 +410,18 @@ func New(addr string, healthService health.Service, institutionService applicati
 	})
 
 	return &Server{
-		httpServer: &http.Server{
-			Addr:    addr,
-			Handler: observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService, verifier)), slog.Default(), metrics),
-		},
+		httpServer: newHTTPServer(addr, observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService, verifier)), slog.Default(), metrics)),
+	}
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 }
 
@@ -431,7 +432,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 			writer.Header().Set("Access-Control-Allow-Origin", origin)
 			writer.Header().Set("Vary", "Origin")
 			writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Sec-WebSocket-Protocol, x-correlation-id")
-			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		}
 		if request.Method == http.MethodOptions {
 			writer.WriteHeader(http.StatusNoContent)
@@ -441,27 +442,37 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func healthHandler(healthService health.Service) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		status := healthService.Check(request.Context())
+		if !status.OK {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+		}
+		_ = json.NewEncoder(writer).Encode(status)
+	})
+}
+
 func isLocalFrontendOrigin(origin string) bool {
 	if origin == "" {
 		return false
 	}
-	configuredOrigins := os.Getenv("CORS_ORIGINS")
-	if configuredOrigins == "" {
-		configuredOrigins = "http://localhost:4173,http://localhost:4174,http://localhost:4175,http://localhost:4176,http://localhost:4178,http://localhost:4179,http://127.0.0.1:4173,http://127.0.0.1:4174,http://127.0.0.1:4175,http://127.0.0.1:4176,http://127.0.0.1:4178,http://127.0.0.1:4179,https://mfe-communication-host.vercel.app,https://mfe-communication-mfe-activity.vercel.app,https://mfe-communication-mfe-student.vercel.app,https://mfe-communication-mfe-institution.vercel.app,https://mfe-communication-mfe-dashboard.vercel.app,https://mfe-communication-mfe-admin.vercel.app"
-	}
-	for _, configuredOrigin := range strings.Split(configuredOrigins, ",") {
+	for _, configuredOrigin := range strings.Split(os.Getenv("CORS_ORIGINS"), ",") {
 		if strings.TrimSpace(configuredOrigin) == origin {
 			return true
 		}
 	}
-
-	parsedOrigin, err := url.Parse(origin)
-	if err != nil || parsedOrigin.Host == "" {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") {
 		return false
 	}
+	return isLoopbackOrigin(origin)
+}
 
-	host := strings.ToLower(parsedOrigin.Hostname())
-	return host == "vercel.app" || strings.HasSuffix(host, ".vercel.app")
+func isLoopbackOrigin(origin string) bool {
+	return strings.HasPrefix(origin, "http://localhost:") ||
+		strings.HasPrefix(origin, "https://localhost:") ||
+		strings.HasPrefix(origin, "http://127.0.0.1:") ||
+		strings.HasPrefix(origin, "https://127.0.0.1:")
 }
 
 func authorizeInstitutionEdit(writer http.ResponseWriter, request *http.Request, policy domainauthorization.Policy, institutionID string) bool {
@@ -492,9 +503,30 @@ func writeError(writer http.ResponseWriter, status int, message string) {
 	writeJSON(writer, status, map[string]string{"error": message})
 }
 
+func decodeJSON(writer http.ResponseWriter, request *http.Request, destination any) error {
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<20)
+	decoder := json.NewDecoder(request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("invalid JSON body")
+	}
+	return nil
+}
+
 func writeServiceError(writer http.ResponseWriter, err error, fallback string) {
 	if apperrors.IsDatabaseUnavailable(err) {
 		writeError(writer, http.StatusFailedDependency, apperrors.ErrDatabaseUnavailable.Error())
+		return
+	}
+	if apperrors.IsDuplicateEntry(err) {
+		writeError(writer, http.StatusConflict, apperrors.DuplicateEntryMessage(err))
+		return
+	}
+	if apperrors.IsForeignKeyViolation(err) {
+		writeError(writer, http.StatusUnprocessableEntity, apperrors.ErrForeignKeyViolation.Error())
 		return
 	}
 	writeError(writer, http.StatusInternalServerError, fallback)

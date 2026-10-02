@@ -27,6 +27,21 @@ func (metrics *requestMetrics) handler(writer http.ResponseWriter, _ *http.Reque
 	fmt.Fprintf(writer, "http_requests_in_flight %d\n", metrics.inFlight.Load())
 }
 
+func metricsHandler(metrics *requestMetrics) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		user, ok := userFromContext(request.Context())
+		if !ok {
+			writeError(writer, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if !user.SuperAdmin {
+			writeError(writer, http.StatusForbidden, "forbidden")
+			return
+		}
+		metrics.handler(writer, request)
+	})
+}
+
 func observabilityMiddleware(next http.Handler, logger *slog.Logger, metrics *requestMetrics) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		startedAt := time.Now()

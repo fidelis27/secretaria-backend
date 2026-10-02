@@ -14,21 +14,12 @@ type identityContextKey struct{}
 type identityClaimsContextKey struct{}
 
 type IdentityClaims struct {
-	Subject       string   `json:"sub"`
-	Email         string   `json:"email"`
-	EmailVerified bool     `json:"email_verified"`
-	Roles         []string `json:"roles"`
-	UserMetadata  struct {
-		EmailVerified bool `json:"email_verified"`
-	} `json:"user_metadata"`
+	Subject     string   `json:"sub"`
+	Email       string   `json:"email"`
+	Roles       []string `json:"roles"`
 	AppMetadata struct {
 		Roles []string `json:"roles"`
 	} `json:"app_metadata"`
-}
-
-// Supabase reports email verification inside user_metadata.
-func (claims IdentityClaims) emailVerified() bool {
-	return claims.EmailVerified || claims.UserMetadata.EmailVerified
 }
 
 type identityTokenVerifier interface {
@@ -48,14 +39,35 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 			return
 		}
 		claims, err := verifier.Verify(request.Context(), token)
-		if err != nil || strings.TrimSpace(claims.Subject) == "" || strings.TrimSpace(claims.Email) == "" || !claims.emailVerified() {
+		if err != nil || strings.TrimSpace(claims.Subject) == "" || strings.TrimSpace(claims.Email) == "" {
 			writeError(writer, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		user, found, err := users.FindByEmail(request.Context(), strings.TrimSpace(claims.Email))
+		subject := strings.TrimSpace(claims.Subject)
+		email := strings.TrimSpace(claims.Email)
+
+		user, found, err := users.FindByAuthSub(request.Context(), subject)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not load user")
+			writeServiceError(writer, err, "could not load user")
 			return
+		}
+		if !found {
+			user, found, err = users.FindByEmail(request.Context(), email)
+			if err != nil {
+				writeServiceError(writer, err, "could not load user")
+				return
+			}
+			if found && strings.TrimSpace(user.AuthSub) != "" && user.AuthSub != subject {
+				writeError(writer, http.StatusForbidden, "forbidden")
+				return
+			}
+			if found && strings.TrimSpace(user.AuthSub) == "" {
+				if err := users.LinkAuthSub(request.Context(), user.ID, subject); err != nil {
+					writeServiceError(writer, err, "could not link user identity")
+					return
+				}
+				user.AuthSub = subject
+			}
 		}
 		if !found || user.Status != "active" {
 			writeError(writer, http.StatusForbidden, "forbidden")

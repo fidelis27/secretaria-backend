@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -17,7 +16,7 @@ func userListHandler(users applicationuser.Service, policy domainauthorization.P
 		}
 		result, err := users.List(request.Context())
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list users")
+			writeServiceError(writer, err, "could not list users")
 			return
 		}
 		writeJSON(writer, http.StatusOK, result)
@@ -34,17 +33,17 @@ func userCreateHandler(users applicationuser.Service, policy domainauthorization
 			Email      string `json:"email"`
 			SuperAdmin bool   `json:"superAdmin"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 		created, err := users.Create(request.Context(), input.Name, input.Email, input.SuperAdmin)
-		if errors.Is(err, domainuser.ErrNameRequired) || errors.Is(err, domainuser.ErrEmailRequired) {
+		if errors.Is(err, domainuser.ErrNameRequired) || errors.Is(err, domainuser.ErrEmailRequired) || errors.Is(err, domainuser.ErrEmailInvalid) {
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create user")
+			writeServiceError(writer, err, "could not create user")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)

@@ -57,13 +57,12 @@ func TestVerifierValidatesSupabaseStyleOIDCToken(t *testing.T) {
 	}
 
 	rawToken := signedToken(t, privateKey, map[string]any{
-		"iss":            server.URL,
-		"sub":            "supabase-user-id",
-		"aud":            "authenticated",
-		"exp":            time.Now().Add(time.Hour).Unix(),
-		"iat":            time.Now().Unix(),
-		"email":          "active@example.com",
-		"user_metadata":  map[string]any{"email_verified": true},
+		"iss":   server.URL,
+		"sub":   "supabase-user-id",
+		"aud":   "authenticated",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"iat":   time.Now().Unix(),
+		"email": "active@example.com",
 		"app_metadata": map[string]any{
 			"roles": []string{"super_admin"},
 		},
@@ -73,8 +72,8 @@ func TestVerifierValidatesSupabaseStyleOIDCToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
-	if claims.Subject != "supabase-user-id" || claims.Email != "active@example.com" || !claims.UserMetadata.EmailVerified {
-		t.Fatalf("unexpected verified claims: %+v", claims)
+	if claims.Subject != "supabase-user-id" || claims.Email != "active@example.com" {
+		t.Fatalf("unexpected claims: %+v", claims)
 	}
 	if len(claims.AppMetadata.Roles) != 1 || claims.AppMetadata.Roles[0] != "super_admin" {
 		t.Fatalf("unexpected app metadata roles: %+v", claims.AppMetadata.Roles)

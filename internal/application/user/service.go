@@ -40,6 +40,14 @@ func (service Service) FindByEmail(ctx context.Context, email string) (domainuse
 	return service.repository.FindByEmail(ctx, strings.TrimSpace(email))
 }
 
+func (service Service) FindByAuthSub(ctx context.Context, authSub string) (domainuser.User, bool, error) {
+	return service.repository.FindByAuthSub(ctx, strings.TrimSpace(authSub))
+}
+
+func (service Service) LinkAuthSub(ctx context.Context, userID string, authSub string) error {
+	return service.repository.LinkAuthSub(ctx, strings.TrimSpace(userID), strings.TrimSpace(authSub))
+}
+
 func newID() string {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {
