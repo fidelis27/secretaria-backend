@@ -3,7 +3,9 @@ package httpserver
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestIsLocalFrontendOriginUsesConfiguredOrigins(t *testing.T) {
@@ -61,5 +63,34 @@ func TestCorsMiddlewareHandlesAllowedPreflight(t *testing.T) {
 	}
 	if recorder.Header().Get("Access-Control-Allow-Methods") != "GET, POST, PATCH, DELETE, OPTIONS" {
 		t.Fatalf("allow-methods = %q", recorder.Header().Get("Access-Control-Allow-Methods"))
+	}
+}
+
+func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"name":"Ana","extra":true}`))
+
+	var input struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(recorder, request, &input); err == nil {
+		t.Fatal("decodeJSON should reject unknown fields")
+	}
+}
+
+func TestNewHTTPServerAppliesTimeouts(t *testing.T) {
+	server := newHTTPServer(":3333", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	if server.ReadHeaderTimeout != 5*time.Second {
+		t.Fatalf("ReadHeaderTimeout = %s", server.ReadHeaderTimeout)
+	}
+	if server.ReadTimeout != 15*time.Second {
+		t.Fatalf("ReadTimeout = %s", server.ReadTimeout)
+	}
+	if server.WriteTimeout != 30*time.Second {
+		t.Fatalf("WriteTimeout = %s", server.WriteTimeout)
+	}
+	if server.IdleTimeout != 60*time.Second {
+		t.Fatalf("IdleTimeout = %s", server.IdleTimeout)
 	}
 }

@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -63,7 +64,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			Name string `json:"name"`
 			CNPJ string `json:"cnpj"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -113,7 +114,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		var input struct {
 			InstitutionID string `json:"institutionId"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -179,7 +180,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			UserID string                   `json:"userId"`
 			Role   domainauthorization.Role `json:"role"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -218,7 +219,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			Name          string `json:"name"`
 			InstitutionID string `json:"institutionId"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -267,7 +268,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			StudentID     string `json:"studentId"`
 			InstitutionID string `json:"institutionId"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -289,7 +290,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		var input struct {
 			InstitutionID string `json:"institutionId"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -334,7 +335,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			Reason string `json:"reason"`
 			Date   string `json:"date"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
@@ -416,10 +417,18 @@ func New(addr string, healthService health.Service, institutionService applicati
 	})
 
 	return &Server{
-		httpServer: &http.Server{
-			Addr:    addr,
-			Handler: observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService, verifier)), slog.Default(), metrics),
-		},
+		httpServer: newHTTPServer(addr, observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService, verifier)), slog.Default(), metrics)),
+	}
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 }
 
@@ -488,6 +497,19 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 
 func writeError(writer http.ResponseWriter, status int, message string) {
 	writeJSON(writer, status, map[string]string{"error": message})
+}
+
+func decodeJSON(writer http.ResponseWriter, request *http.Request, destination any) error {
+	request.Body = http.MaxBytesReader(writer, request.Body, 1<<20)
+	decoder := json.NewDecoder(request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("invalid JSON body")
+	}
+	return nil
 }
 
 func writeServiceError(writer http.ResponseWriter, err error, fallback string) {

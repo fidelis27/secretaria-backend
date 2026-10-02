@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -34,7 +33,7 @@ func userCreateHandler(users applicationuser.Service, policy domainauthorization
 			Email      string `json:"email"`
 			SuperAdmin bool   `json:"superAdmin"`
 		}
-		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		if err := decodeJSON(writer, request, &input); err != nil {
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
