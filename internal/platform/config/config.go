@@ -4,19 +4,22 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
-	Port            int
-	DBHost          string
-	DBPort          int
-	DBName          string
-	DBUser          string
-	DBPass          string
-	DBTLS           bool
-	DBTLSSkipVerify bool
-	OIDCIssuer      string
-	OIDCAudience    string
+	Port                     int
+	AppEnv                   string
+	DBHost                   string
+	DBPort                   int
+	DBName                   string
+	DBUser                   string
+	DBPass                   string
+	DBTLS                    bool
+	DBTLSSkipVerify          bool
+	OIDCIssuer               string
+	OIDCAudience             string
+	BootstrapSuperAdminEmail string
 }
 
 func Load() (Config, error) {
@@ -40,16 +43,18 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Port:            port,
-		DBHost:          os.Getenv("DB_HOST"),
-		DBPort:          dbPort,
-		DBName:          os.Getenv("DB_NAME"),
-		DBUser:          os.Getenv("DB_USER"),
-		DBPass:          os.Getenv("DB_PASSWORD"),
-		DBTLS:           dbTLS,
-		DBTLSSkipVerify: dbTLSSkipVerify,
-		OIDCIssuer:      os.Getenv("OIDC_ISSUER"),
-		OIDCAudience:    envString("OIDC_AUDIENCE", "authenticated"),
+		Port:                     port,
+		AppEnv:                   envString("APP_ENV", "development"),
+		DBHost:                   os.Getenv("DB_HOST"),
+		DBPort:                   dbPort,
+		DBName:                   os.Getenv("DB_NAME"),
+		DBUser:                   os.Getenv("DB_USER"),
+		DBPass:                   os.Getenv("DB_PASSWORD"),
+		DBTLS:                    dbTLS,
+		DBTLSSkipVerify:          dbTLSSkipVerify,
+		OIDCIssuer:               os.Getenv("OIDC_ISSUER"),
+		OIDCAudience:             envString("OIDC_AUDIENCE", "authenticated"),
+		BootstrapSuperAdminEmail: strings.TrimSpace(os.Getenv("BOOTSTRAP_SUPER_ADMIN_EMAIL")),
 	}, nil
 }
 

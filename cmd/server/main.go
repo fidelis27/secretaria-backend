@@ -9,6 +9,7 @@ import (
 	"github.com/fidelis27/secretaria-backend/internal/adapters/httpserver"
 	"github.com/fidelis27/secretaria-backend/internal/adapters/mariadb"
 	oidcverifier "github.com/fidelis27/secretaria-backend/internal/adapters/oidc"
+	applicationbootstrap "github.com/fidelis27/secretaria-backend/internal/application/bootstrap"
 	applicationenrollment "github.com/fidelis27/secretaria-backend/internal/application/enrollment"
 	applicationevent "github.com/fidelis27/secretaria-backend/internal/application/event"
 	applicationgroup "github.com/fidelis27/secretaria-backend/internal/application/group"
@@ -35,6 +36,11 @@ func main() {
 	defer database.Close()
 	if err := migrations.Apply(context.Background(), database.SQLDB()); err != nil {
 		slog.Error("failed to apply database migrations", "error", err)
+		os.Exit(1)
+	}
+	bootstrapService := applicationbootstrap.NewService(mariadb.NewBootstrapRepository(database))
+	if _, err := bootstrapService.EnsureFirstSuperAdmin(context.Background(), appConfig.BootstrapSuperAdminEmail); err != nil {
+		slog.Error("failed to bootstrap first superadmin", "error", err)
 		os.Exit(1)
 	}
 

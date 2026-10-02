@@ -32,6 +32,12 @@ var alreadyExistsErrorCodes = map[uint16]bool{
 	1826: true, // ER_FK_DUP_NAME
 }
 
+var skippedProductionMigrations = map[string]bool{
+	"004_seed_demo_super_admin.sql":     true,
+	"006_seed_demo_institution.sql":     true,
+	"007_promote_owner_super_admin.sql": true,
+}
+
 func Apply(ctx context.Context, database *sql.DB) error {
 	if _, err := database.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -48,6 +54,9 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 	sort.Strings(entries)
 
 	for _, entry := range entries {
+		if skippedProductionMigrations[entry] {
+			continue
+		}
 		var applied bool
 		if err := database.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?)", entry).Scan(&applied); err != nil {
 			return fmt.Errorf("check migration %s: %w", entry, err)
