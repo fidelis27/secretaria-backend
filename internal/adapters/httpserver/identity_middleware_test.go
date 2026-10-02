@@ -11,7 +11,11 @@ import (
 )
 
 type identityRepository struct {
-	users map[string]domainuser.User
+	users  map[string]domainuser.User
+	linked []struct {
+		userID  string
+		authSub string
+	}
 }
 
 type staticIdentityVerifier struct {
@@ -45,8 +49,28 @@ func (repository identityRepository) FindByEmail(_ context.Context, email string
 	return domainuser.User{}, false, nil
 }
 
+func (repository identityRepository) FindByAuthSub(_ context.Context, authSub string) (domainuser.User, bool, error) {
+	for _, user := range repository.users {
+		if user.AuthSub == authSub {
+			return user, true, nil
+		}
+	}
+	return domainuser.User{}, false, nil
+}
+
+func (repository *identityRepository) LinkAuthSub(_ context.Context, userID string, authSub string) error {
+	user := repository.users[userID]
+	user.AuthSub = authSub
+	repository.users[userID] = user
+	repository.linked = append(repository.linked, struct {
+		userID  string
+		authSub string
+	}{userID: userID, authSub: authSub})
+	return nil
+}
+
 func TestIdentityMiddlewareRequiresDemoUser(t *testing.T) {
-	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(identityRepository{}), staticIdentityVerifier{})
+	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(&identityRepository{}), staticIdentityVerifier{})
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/institutions", nil))
 
@@ -56,7 +80,7 @@ func TestIdentityMiddlewareRequiresDemoUser(t *testing.T) {
 }
 
 func TestIdentityMiddlewareRejectsUnknownAndInactiveUsers(t *testing.T) {
-	users := identityRepository{users: map[string]domainuser.User{
+	users := &identityRepository{users: map[string]domainuser.User{
 		"inactive": {ID: "inactive", Email: "inactive@example.com", Status: "inactive"},
 	}}
 	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(users), staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: "unknown@example.com"}})
@@ -76,8 +100,8 @@ func TestIdentityMiddlewareRejectsUnknownAndInactiveUsers(t *testing.T) {
 }
 
 func TestIdentityMiddlewarePassesActiveUserAndPublicRoutes(t *testing.T) {
-	users := identityRepository{users: map[string]domainuser.User{
-		"active": {ID: "active", Email: "active@example.com", Status: "active", SuperAdmin: true},
+	users := &identityRepository{users: map[string]domainuser.User{
+		"active": {ID: "active", Email: "active@example.com", AuthSub: "subject", Status: "active", SuperAdmin: true},
 	}}
 	called := false
 	handler := identityMiddleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -119,7 +143,7 @@ func TestIdentityMiddlewarePassesActiveUserAndPublicRoutes(t *testing.T) {
 }
 
 func TestIdentityMiddlewareAllowsTokensWithoutEmailVerificationClaim(t *testing.T) {
-	users := identityRepository{users: map[string]domainuser.User{
+	users := &identityRepository{users: map[string]domainuser.User{
 		"active": {ID: "active", Email: "active@example.com", Status: "active"},
 	}}
 	handler := identityMiddleware(
@@ -137,10 +161,34 @@ func TestIdentityMiddlewareAllowsTokensWithoutEmailVerificationClaim(t *testing.
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNoContent)
 	}
+	if users.users["active"].AuthSub != "subject" {
+		t.Fatalf("auth_sub was not linked: %+v", users.users["active"])
+	}
+}
+
+func TestIdentityMiddlewareRejectsMismatchedAuthSub(t *testing.T) {
+	users := &identityRepository{users: map[string]domainuser.User{
+		"active": {ID: "active", Email: "active@example.com", AuthSub: "other-subject", Status: "active"},
+	}}
+	handler := identityMiddleware(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Fatal("request should not reach handler")
+		}),
+		applicationuser.NewService(users),
+		staticIdentityVerifier{claims: IdentityClaims{Subject: "subject", Email: "active@example.com"}},
+	)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/institutions", nil)
+	request.Header.Set("Authorization", "Bearer test-token")
+
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
+	}
 }
 
 func TestIdentityMiddlewareProtectsUserCreation(t *testing.T) {
-	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(identityRepository{}), staticIdentityVerifier{})
+	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(&identityRepository{}), staticIdentityVerifier{})
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/users", nil))
 
@@ -148,4 +196,3 @@ func TestIdentityMiddlewareProtectsUserCreation(t *testing.T) {
 		t.Fatalf("user creation status = %d, want %d", recorder.Code, http.StatusUnauthorized)
 	}
 }
-

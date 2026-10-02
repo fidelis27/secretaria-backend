@@ -48,7 +48,9 @@ e associa o subject/e-mail do token a um usuario ativo no banco. Desabilite o
 cadastro publico no Supabase: o backend nao exige mais `email_verified`, porque
 o Supabase nao envia esse claim de forma confiavel no topo do token e
 `user_metadata` e editavel pelo proprio usuario. Provisione apenas contas que
-correspondam a usuarios ativos locais.
+correspondam a usuarios ativos locais. O vinculo principal passa a ser o
+`sub`: o backend procura primeiro por `users.auth_sub` e, na primeira entrada
+de um usuario legado, grava o `sub` do token no cadastro local.
 Para conceder `super_admin`, configure `app_metadata.roles` no Supabase e a
 marca local de superadmin; ambas precisam estar presentes.
 

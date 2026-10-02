@@ -43,10 +43,31 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 			writeError(writer, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		user, found, err := users.FindByEmail(request.Context(), strings.TrimSpace(claims.Email))
+		subject := strings.TrimSpace(claims.Subject)
+		email := strings.TrimSpace(claims.Email)
+
+		user, found, err := users.FindByAuthSub(request.Context(), subject)
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "could not load user")
 			return
+		}
+		if !found {
+			user, found, err = users.FindByEmail(request.Context(), email)
+			if err != nil {
+				writeError(writer, http.StatusInternalServerError, "could not load user")
+				return
+			}
+			if found && strings.TrimSpace(user.AuthSub) != "" && user.AuthSub != subject {
+				writeError(writer, http.StatusForbidden, "forbidden")
+				return
+			}
+			if found && strings.TrimSpace(user.AuthSub) == "" {
+				if err := users.LinkAuthSub(request.Context(), user.ID, subject); err != nil {
+					writeError(writer, http.StatusInternalServerError, "could not link user identity")
+					return
+				}
+				user.AuthSub = subject
+			}
 		}
 		if !found || user.Status != "active" {
 			writeError(writer, http.StatusForbidden, "forbidden")

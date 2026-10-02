@@ -34,6 +34,14 @@ func (*userHandlerRepository) FindByEmail(context.Context, string) (domainuser.U
 	return domainuser.User{}, false, nil
 }
 
+func (*userHandlerRepository) FindByAuthSub(context.Context, string) (domainuser.User, bool, error) {
+	return domainuser.User{}, false, nil
+}
+
+func (*userHandlerRepository) LinkAuthSub(context.Context, string, string) error {
+	return nil
+}
+
 type userHandlerMemberships struct{}
 
 func (userHandlerMemberships) ListInstitutionIDsByUser(context.Context, string) ([]string, error) {

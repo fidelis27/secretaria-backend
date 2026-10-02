@@ -1,0 +1,2 @@
+ALTER TABLE users
+    ADD COLUMN auth_sub VARCHAR(255) NULL UNIQUE AFTER email;
