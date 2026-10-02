@@ -9,4 +9,6 @@ type Repository interface {
 	FindByEmail(ctx context.Context, email string) (User, bool, error)
 	FindByAuthSub(ctx context.Context, authSub string) (User, bool, error)
 	LinkAuthSub(ctx context.Context, userID string, authSub string) error
+	Update(ctx context.Context, user User) error
+	CountActiveSuperAdmins(ctx context.Context) (int, error)
 }

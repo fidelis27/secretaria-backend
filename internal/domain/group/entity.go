@@ -2,18 +2,24 @@ package group
 
 import (
 	"errors"
+	"strings"
 
 	domainauthorization "github.com/fidelis27/secretaria-backend/internal/domain/authorization"
 )
 
 var ErrInstitutionIDRequired = errors.New("group institution id is required")
+var ErrNameRequired = errors.New("group name is required")
 var ErrUserIDRequired = errors.New("membership user id is required")
 var ErrGroupIDRequired = errors.New("membership group id is required")
 var ErrInvalidRole = errors.New("membership role is invalid")
+var ErrMembershipNotFound = errors.New("membership not found")
+var ErrLastAdminRequired = errors.New("o grupo deve manter ao menos um administrador")
 
 type Group struct {
-	ID            string `json:"id"`
-	InstitutionID string `json:"institutionId"`
+	ID              string `json:"id"`
+	InstitutionID   string `json:"institutionId"`
+	Name            string `json:"name"`
+	InstitutionName string `json:"institutionName,omitempty"`
 }
 
 type Membership struct {
@@ -21,13 +27,25 @@ type Membership struct {
 	GroupID       string                   `json:"groupId"`
 	InstitutionID string                   `json:"institutionId"`
 	Role          domainauthorization.Role `json:"role"`
+	UserName      string                   `json:"userName,omitempty"`
+	UserEmail     string                   `json:"userEmail,omitempty"`
 }
 
-func New(id string, institutionID string) (Group, error) {
+type Candidate struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+func New(id string, institutionID string, name string) (Group, error) {
 	if institutionID == "" {
 		return Group{}, ErrInstitutionIDRequired
 	}
-	return Group{ID: id, InstitutionID: institutionID}, nil
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Group{}, ErrNameRequired
+	}
+	return Group{ID: id, InstitutionID: institutionID, Name: name}, nil
 }
 
 func NewMembership(userID string, groupID string, institutionID string, role domainauthorization.Role) (Membership, error) {

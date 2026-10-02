@@ -69,6 +69,24 @@ func (repository *identityRepository) LinkAuthSub(_ context.Context, userID stri
 	return nil
 }
 
+func (repository identityRepository) Update(_ context.Context, user domainuser.User) error {
+	if repository.users == nil {
+		repository.users = map[string]domainuser.User{}
+	}
+	repository.users[user.ID] = user
+	return nil
+}
+
+func (repository identityRepository) CountActiveSuperAdmins(context.Context) (int, error) {
+	count := 0
+	for _, user := range repository.users {
+		if user.SuperAdmin && user.Status == "active" {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func TestIdentityMiddlewareRequiresDemoUser(t *testing.T) {
 	handler := identityMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), applicationuser.NewService(&identityRepository{}), staticIdentityVerifier{})
 	recorder := httptest.NewRecorder()

@@ -18,15 +18,19 @@ func NewService(repository domaingroup.Repository) Service {
 	return Service{repository: repository}
 }
 
-func (service Service) Create(ctx context.Context, institutionID string) (domaingroup.Group, error) {
-	entity, err := domaingroup.New(newID(), strings.TrimSpace(institutionID))
+func (service Service) Create(ctx context.Context, institutionID string, name string) (domaingroup.Group, error) {
+	entity, err := domaingroup.New(newID(), strings.TrimSpace(institutionID), strings.TrimSpace(name))
 	if err != nil {
 		return domaingroup.Group{}, err
 	}
 	if err := service.repository.Create(ctx, entity); err != nil {
 		return domaingroup.Group{}, err
 	}
-	return entity, nil
+	created, _, err := service.repository.FindByID(ctx, entity.ID)
+	if err != nil {
+		return domaingroup.Group{}, err
+	}
+	return created, nil
 }
 
 func (service Service) List(ctx context.Context) ([]domaingroup.Group, error) {
@@ -46,14 +50,45 @@ func (service Service) AddMembership(ctx context.Context, userID string, groupID
 	if err != nil {
 		return domaingroup.Membership{}, err
 	}
-	if err := service.repository.AddMembership(ctx, entity); err != nil {
+	created, err := service.repository.AddMembership(ctx, entity)
+	if err != nil {
 		return domaingroup.Membership{}, err
 	}
-	return entity, nil
+	return created, nil
+}
+
+func (service Service) UpdateMembershipRole(ctx context.Context, groupID string, userID string, role domainauthorization.Role) (domaingroup.Membership, error) {
+	if strings.TrimSpace(userID) == "" {
+		return domaingroup.Membership{}, domaingroup.ErrUserIDRequired
+	}
+	if strings.TrimSpace(groupID) == "" {
+		return domaingroup.Membership{}, domaingroup.ErrGroupIDRequired
+	}
+	if role != domainauthorization.RoleAdmin && role != domainauthorization.RoleMember {
+		return domaingroup.Membership{}, domaingroup.ErrInvalidRole
+	}
+	return service.repository.UpdateMembershipRole(ctx, strings.TrimSpace(groupID), strings.TrimSpace(userID), role)
+}
+
+func (service Service) RemoveMembership(ctx context.Context, groupID string, userID string) error {
+	if strings.TrimSpace(userID) == "" {
+		return domaingroup.ErrUserIDRequired
+	}
+	if strings.TrimSpace(groupID) == "" {
+		return domaingroup.ErrGroupIDRequired
+	}
+	return service.repository.RemoveMembership(ctx, strings.TrimSpace(groupID), strings.TrimSpace(userID))
 }
 
 func (service Service) ListMemberships(ctx context.Context, groupID string) ([]domaingroup.Membership, error) {
 	return service.repository.ListMemberships(ctx, groupID)
+}
+
+func (service Service) ListCandidates(ctx context.Context, groupID string) ([]domaingroup.Candidate, error) {
+	if strings.TrimSpace(groupID) == "" {
+		return nil, domaingroup.ErrGroupIDRequired
+	}
+	return service.repository.ListCandidates(ctx, strings.TrimSpace(groupID))
 }
 
 func newID() string {

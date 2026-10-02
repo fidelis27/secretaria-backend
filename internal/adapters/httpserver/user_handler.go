@@ -3,7 +3,9 @@ package httpserver
 import (
 	"errors"
 	"net/http"
+	"strings"
 
+	applicationevent "github.com/fidelis27/secretaria-backend/internal/application/event"
 	applicationuser "github.com/fidelis27/secretaria-backend/internal/application/user"
 	domainauthorization "github.com/fidelis27/secretaria-backend/internal/domain/authorization"
 	domainuser "github.com/fidelis27/secretaria-backend/internal/domain/user"
@@ -47,6 +49,68 @@ func userCreateHandler(users applicationuser.Service, policy domainauthorization
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
+	})
+}
+
+func userUpdateHandler(users applicationuser.Service, policy domainauthorization.Policy, events applicationevent.Service) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if !authorizeUserManagement(writer, request, policy) {
+			return
+		}
+
+		var input struct {
+			Name   *string `json:"name"`
+			Status *string `json:"status"`
+		}
+		if err := decodeJSON(writer, request, &input); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+
+		currentUser, _ := userFromContext(request.Context())
+		targetUser, found, err := users.FindByID(request.Context(), request.PathValue("userId"))
+		if err != nil {
+			writeServiceError(writer, err, "could not load user")
+			return
+		}
+		if !found {
+			writeError(writer, http.StatusNotFound, "user not found")
+			return
+		}
+		normalizedStatus := ""
+		if input.Status != nil {
+			normalizedStatus = strings.TrimSpace(*input.Status)
+		}
+		if normalizedStatus == "inactive" && targetUser.ID == currentUser.ID {
+			writeError(writer, http.StatusForbidden, "voce nao pode desativar o proprio usuario")
+			return
+		}
+		if normalizedStatus == "inactive" && targetUser.SuperAdmin && targetUser.Status == "active" {
+			activeSuperAdmins, err := users.CountActiveSuperAdmins(request.Context())
+			if err != nil {
+				writeServiceError(writer, err, "could not validate superadmin status")
+				return
+			}
+			if activeSuperAdmins <= 1 {
+				writeError(writer, http.StatusConflict, "deve permanecer ao menos um superadmin ativo")
+				return
+			}
+		}
+
+		updated, err := users.Update(request.Context(), targetUser.ID, input.Name, input.Status)
+		if errors.Is(err, domainuser.ErrNameRequired) || errors.Is(err, domainuser.ErrStatusInvalid) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err != nil {
+			writeServiceError(writer, err, "could not update user")
+			return
+		}
+		if err := publishDomainEvent(request.Context(), events, "USER_UPDATED", "backend.user", request.Header.Get("x-correlation-id"), nil, updated); err != nil {
+			writeError(writer, http.StatusInternalServerError, "could not publish user update event")
+			return
+		}
+		writeJSON(writer, http.StatusOK, updated)
 	})
 }
 
