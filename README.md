@@ -15,16 +15,18 @@ go run ./cmd/seed
 ## Configuracao
 
 O servidor le `PORT`, `APP_ENV`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
-`DB_PASSWORD`, `DB_TLS`, `OIDC_ISSUER`, `OIDC_AUDIENCE` e
-`BOOTSTRAP_SUPER_ADMIN_EMAIL`. Para Supabase Auth, configure `OIDC_ISSUER` com
-`https://<project-ref>.supabase.co/auth/v1` e deixe
+`DB_PASSWORD`, `DB_TLS`, `OIDC_ISSUER`, `OIDC_AUDIENCE`,
+`BOOTSTRAP_SUPER_ADMIN_EMAIL` e `CORS_ORIGINS`. Para Supabase Auth, configure
+`OIDC_ISSUER` com `https://<project-ref>.supabase.co/auth/v1` e deixe
 `OIDC_AUDIENCE=authenticated`. A inicializacao descobre a configuracao OIDC e as
 chaves JWKS do projeto; use uma chave de assinatura assimetrica (por exemplo,
 ES256), pois chaves simetricas nao podem ser verificadas por uma chave publica.
 Se `BOOTSTRAP_SUPER_ADMIN_EMAIL` estiver definido e ainda nao existir nenhum
 superadmin local, o backend promove esse e-mail (ou cria um usuario local com
-esse e-mail) de forma idempotente. `GET /health` retorna `200` quando o banco
-esta disponivel e `503` quando a verificacao falha.
+esse e-mail) de forma idempotente. Configure `CORS_ORIGINS` com a lista
+explicita de frontends autorizados; `localhost`/`127.0.0.1` so entram
+automaticamente quando `APP_ENV != production`. `GET /health` retorna `200`
+quando o banco esta disponivel e `503` quando a verificacao falha.
 
 As migrations versionadas sao aplicadas com `go run ./cmd/migrate`. O comando
 cria `schema_migrations`, aplica os arquivos SQL em ordem e ignora versoes ja
