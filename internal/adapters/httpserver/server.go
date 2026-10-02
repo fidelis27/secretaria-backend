@@ -32,14 +32,7 @@ type Server struct {
 func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy, verifier identityTokenVerifier) *Server {
 	mux := http.NewServeMux()
 	metrics := newRequestMetrics()
-	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		status := healthService.Check(request.Context())
-		if !status.OK {
-			writer.WriteHeader(http.StatusFailedDependency)
-		}
-		_ = json.NewEncoder(writer).Encode(status)
-	})
+	mux.Handle("GET /health", healthHandler(healthService))
 	mux.HandleFunc("GET /institutions", func(writer http.ResponseWriter, request *http.Request) {
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
@@ -446,6 +439,17 @@ func corsMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(writer, request)
+	})
+}
+
+func healthHandler(healthService health.Service) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		status := healthService.Check(request.Context())
+		if !status.OK {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+		}
+		_ = json.NewEncoder(writer).Encode(status)
 	})
 }
 
