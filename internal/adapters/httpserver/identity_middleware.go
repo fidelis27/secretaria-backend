@@ -48,13 +48,13 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 
 		user, found, err := users.FindByAuthSub(request.Context(), subject)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not load user")
+			writeServiceError(writer, err, "could not load user")
 			return
 		}
 		if !found {
 			user, found, err = users.FindByEmail(request.Context(), email)
 			if err != nil {
-				writeError(writer, http.StatusInternalServerError, "could not load user")
+				writeServiceError(writer, err, "could not load user")
 				return
 			}
 			if found && strings.TrimSpace(user.AuthSub) != "" && user.AuthSub != subject {
@@ -63,7 +63,7 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 			}
 			if found && strings.TrimSpace(user.AuthSub) == "" {
 				if err := users.LinkAuthSub(request.Context(), user.ID, subject); err != nil {
-					writeError(writer, http.StatusInternalServerError, "could not link user identity")
+					writeServiceError(writer, err, "could not link user identity")
 					return
 				}
 				user.AuthSub = subject

@@ -15,7 +15,7 @@ func eventHistoryHandler(events applicationevent.Service, policy domainauthoriza
 		user, _ := userFromContext(request.Context())
 		institutionIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not resolve event scope")
+			writeServiceError(writer, err, "could not resolve event scope")
 			return
 		}
 		var result []domainevent.Event
@@ -25,7 +25,7 @@ func eventHistoryHandler(events applicationevent.Service, policy domainauthoriza
 			result, err = events.ListByInstitutionIDs(request.Context(), limit, institutionIDs)
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list events")
+			writeServiceError(writer, err, "could not list events")
 			return
 		}
 		writeJSON(writer, http.StatusOK, result)

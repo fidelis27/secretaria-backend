@@ -79,7 +79,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create institution")
+			writeServiceError(writer, err, "could not create institution")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
@@ -124,7 +124,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create group")
+			writeServiceError(writer, err, "could not create group")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
@@ -151,7 +151,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		}
 		memberships, err := groupService.ListMemberships(request.Context(), group.ID)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not list memberships")
+			writeServiceError(writer, err, "could not list memberships")
 			return
 		}
 		writeJSON(writer, http.StatusOK, memberships)
@@ -190,7 +190,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create membership")
+			writeServiceError(writer, err, "could not create membership")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
@@ -232,7 +232,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create student")
+			writeServiceError(writer, err, "could not create student")
 			return
 		}
 		if err := publishDomainEvent(request.Context(), eventService, "STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), []string{created.InstitutionID}, created); err != nil {
@@ -281,7 +281,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not create enrollment")
+			writeServiceError(writer, err, "could not create enrollment")
 			return
 		}
 		writeJSON(writer, http.StatusCreated, created)
@@ -316,7 +316,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not transfer enrollment")
+			writeServiceError(writer, err, "could not transfer enrollment")
 			return
 		}
 		if err := publishDomainEvent(request.Context(), eventService, "STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID, created.InstitutionID}, map[string]string{
@@ -366,7 +366,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not suspend enrollment")
+			writeServiceError(writer, err, "could not suspend enrollment")
 			return
 		}
 		if err := publishDomainEvent(request.Context(), eventService, "ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
@@ -403,7 +403,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			return
 		}
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not reopen enrollment")
+			writeServiceError(writer, err, "could not reopen enrollment")
 			return
 		}
 		if err := publishDomainEvent(request.Context(), eventService, "ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
@@ -515,6 +515,14 @@ func decodeJSON(writer http.ResponseWriter, request *http.Request, destination a
 func writeServiceError(writer http.ResponseWriter, err error, fallback string) {
 	if apperrors.IsDatabaseUnavailable(err) {
 		writeError(writer, http.StatusFailedDependency, apperrors.ErrDatabaseUnavailable.Error())
+		return
+	}
+	if apperrors.IsDuplicateEntry(err) {
+		writeError(writer, http.StatusConflict, apperrors.DuplicateEntryMessage(err))
+		return
+	}
+	if apperrors.IsForeignKeyViolation(err) {
+		writeError(writer, http.StatusUnprocessableEntity, apperrors.ErrForeignKeyViolation.Error())
 		return
 	}
 	writeError(writer, http.StatusInternalServerError, fallback)

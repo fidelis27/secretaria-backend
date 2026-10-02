@@ -26,7 +26,7 @@ func eventHandler(bus *applicationevent.Bus, policy domainauthorization.Policy) 
 		}
 		visibleIDs, err := policy.VisibleInstitutionIDs(request.Context(), user)
 		if err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not resolve event scope")
+			writeServiceError(writer, err, "could not resolve event scope")
 			return
 		}
 		subscriber, cancel := bus.Subscribe()
