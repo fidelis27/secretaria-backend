@@ -9,6 +9,7 @@ import (
 var ErrNameRequired = errors.New("user name is required")
 var ErrEmailRequired = errors.New("user email is required")
 var ErrEmailInvalid = errors.New("user email is invalid")
+var ErrStatusInvalid = errors.New("user status is invalid")
 
 type User struct {
 	ID         string `json:"id"`
@@ -41,4 +42,22 @@ func New(id string, name string, email string, superAdmin bool) (User, error) {
 		Status:     "active",
 		SuperAdmin: superAdmin,
 	}, nil
+}
+
+func NormalizeName(name string) (string, error) {
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		return "", ErrNameRequired
+	}
+	return trimmedName, nil
+}
+
+func NormalizeStatus(status string) (string, error) {
+	trimmedStatus := strings.TrimSpace(status)
+	switch trimmedStatus {
+	case "active", "inactive":
+		return trimmedStatus, nil
+	default:
+		return "", ErrStatusInvalid
+	}
 }

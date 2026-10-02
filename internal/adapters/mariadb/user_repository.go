@@ -112,6 +112,27 @@ func (repository UserRepository) LinkAuthSub(ctx context.Context, userID string,
 	return nil
 }
 
+func (repository UserRepository) Update(ctx context.Context, entity domainuser.User) error {
+	_, err := repository.connection.database.ExecContext(ctx,
+		`UPDATE users SET name = ?, status = ? WHERE id = ?`,
+		entity.Name, entity.Status, entity.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update user: %w", err)
+	}
+	return nil
+}
+
+func (repository UserRepository) CountActiveSuperAdmins(ctx context.Context) (int, error) {
+	var count int
+	if err := repository.connection.database.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users WHERE super_admin = TRUE AND status = 'active'`,
+	).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count active superadmins: %w", err)
+	}
+	return count, nil
+}
+
 func nullableString(value string) sql.NullString {
 	value = strings.TrimSpace(value)
 	if value == "" {

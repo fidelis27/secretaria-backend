@@ -62,6 +62,22 @@ curl -H "Authorization: Bearer <access-token>" http://localhost:3333/institution
 
 Sem token valido a API retorna `401`; usuarios sem cadastro ativo recebem `403`.
 
+### Rotas administrativas
+
+- `GET /groups` retorna `id`, `institutionId`, `name` e `institutionName`.
+- `POST /groups` exige `{ "institutionId", "name" }`; nomes duplicados na mesma
+  instituicao retornam `409` com mensagem em pt-BR.
+- `GET /groups/{groupId}/members`, `POST /groups/{groupId}/members`,
+  `PATCH /groups/{groupId}/members/{userId}` e
+  `DELETE /groups/{groupId}/members/{userId}` retornam memberships com
+  `userName` e `userEmail`. O backend impede remover ou rebaixar o ultimo admin
+  do grupo e responde `409`.
+- `GET /groups/{groupId}/candidates` e a rota que admins de grupo devem usar
+  para listar usuarios elegiveis (ativos e fora do grupo); ela substitui o uso
+  de `GET /users` nesse fluxo.
+- `PATCH /users/{userId}` aceita `{ "name"?, "status"? }`. Desativar o proprio
+  usuario retorna `403`; desativar o ultimo superadmin ativo retorna `409`.
+
 ## Eventos
 
 O WebSocket `GET /events` exige token no subprotocolo `bearer.<access-token>` e transmite eventos com
