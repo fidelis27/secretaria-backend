@@ -63,7 +63,7 @@ func TestVerifierValidatesSupabaseStyleOIDCToken(t *testing.T) {
 		"exp":            time.Now().Add(time.Hour).Unix(),
 		"iat":            time.Now().Unix(),
 		"email":          "active@example.com",
-		"email_verified": true,
+		"user_metadata":  map[string]any{"email_verified": true},
 		"app_metadata": map[string]any{
 			"roles": []string{"super_admin"},
 		},
@@ -73,7 +73,7 @@ func TestVerifierValidatesSupabaseStyleOIDCToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
-	if claims.Subject != "supabase-user-id" || claims.Email != "active@example.com" || !claims.EmailVerified {
+	if claims.Subject != "supabase-user-id" || claims.Email != "active@example.com" || !claims.UserMetadata.EmailVerified {
 		t.Fatalf("unexpected verified claims: %+v", claims)
 	}
 	if len(claims.AppMetadata.Roles) != 1 || claims.AppMetadata.Roles[0] != "super_admin" {
