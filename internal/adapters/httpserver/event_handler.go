@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -25,7 +26,49 @@ const (
 	websocketReadLimit = 1024
 )
 
-func eventHandler(bus *applicationevent.Bus, policy domainauthorization.Policy) http.Handler {
+type eventConnections struct {
+	mutex       sync.Mutex
+	connections map[*websocket.Conn]struct{}
+	closed      bool
+}
+
+func newEventConnections() *eventConnections {
+	return &eventConnections{connections: make(map[*websocket.Conn]struct{})}
+}
+
+func (connections *eventConnections) register(connection *websocket.Conn) bool {
+	connections.mutex.Lock()
+	defer connections.mutex.Unlock()
+	if connections.closed {
+		_ = connection.Close()
+		return false
+	}
+	connections.connections[connection] = struct{}{}
+	return true
+}
+
+func (connections *eventConnections) unregister(connection *websocket.Conn) {
+	connections.mutex.Lock()
+	delete(connections.connections, connection)
+	connections.mutex.Unlock()
+}
+
+func (connections *eventConnections) closeAll() {
+	connections.mutex.Lock()
+	connections.closed = true
+	active := make([]*websocket.Conn, 0, len(connections.connections))
+	for connection := range connections.connections {
+		active = append(active, connection)
+	}
+	connections.mutex.Unlock()
+
+	for _, connection := range active {
+		_ = connection.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down"), time.Now().Add(websocketWriteWait))
+		_ = connection.Close()
+	}
+}
+
+func eventHandler(bus *applicationevent.Bus, policy domainauthorization.Policy, connections *eventConnections) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		user, ok := userFromContext(request.Context())
 		if !ok {
@@ -47,6 +90,10 @@ func eventHandler(bus *applicationevent.Bus, policy domainauthorization.Policy) 
 		if err != nil {
 			return
 		}
+		if !connections.register(connection) {
+			return
+		}
+		defer connections.unregister(connection)
 		defer connection.Close()
 		connection.SetReadLimit(websocketReadLimit)
 		_ = connection.SetReadDeadline(time.Now().Add(websocketPongWait))

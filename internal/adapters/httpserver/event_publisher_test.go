@@ -45,3 +45,18 @@ func TestPublishDomainEventBestEffortLogsFailure(t *testing.T) {
 		t.Fatalf("expected the event type in the log, got %q", logs.String())
 	}
 }
+
+func TestMutationAuditPayloadIncludesActorTargetAndBeforeAfter(t *testing.T) {
+	payload := mutationAuditPayload(
+		"actor-1",
+		"user-2",
+		map[string]any{"role": "member"},
+		map[string]any{"role": "admin"},
+	)
+	if payload["actorId"] != "actor-1" || payload["targetId"] != "user-2" {
+		t.Fatalf("audit actor/target missing: %#v", payload)
+	}
+	if payload["before"].(map[string]any)["role"] != "member" || payload["after"].(map[string]any)["role"] != "admin" {
+		t.Fatalf("audit before/after values missing: %#v", payload)
+	}
+}

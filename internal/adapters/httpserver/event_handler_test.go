@@ -23,12 +23,12 @@ func TestEventHandlerDeliversPublishedEvent(t *testing.T) {
 		request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, domainuser.User{
 			ID: "super", Status: "active", SuperAdmin: true,
 		}))
-		eventHandler(bus, policy).ServeHTTP(writer, request)
+		eventHandler(bus, policy, newEventConnections()).ServeHTTP(writer, request)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	dialer := websocket.Dialer{Proxy: websocket.DefaultDialer.Proxy, HandshakeTimeout: websocket.DefaultDialer.HandshakeTimeout}
+	dialer := websocket.DefaultDialer
 	connection, _, err := dialer.Dial("ws"+server.URL[len("http"):], websocketHeader("http://localhost:4173"))
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)
@@ -55,7 +55,7 @@ func TestEventHandlerNegotiatesBearerSubprotocol(t *testing.T) {
 		request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, domainuser.User{
 			ID: "super", Status: "active", SuperAdmin: true,
 		}))
-		eventHandler(bus, policy).ServeHTTP(writer, request)
+		eventHandler(bus, policy, newEventConnections()).ServeHTTP(writer, request)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -82,7 +82,7 @@ func TestEventHandlerRejectsDisallowedOrigin(t *testing.T) {
 		request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, domainuser.User{
 			ID: "super", Status: "active", SuperAdmin: true,
 		}))
-		eventHandler(bus, policy).ServeHTTP(writer, request)
+		eventHandler(bus, policy, newEventConnections()).ServeHTTP(writer, request)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -94,6 +94,47 @@ func TestEventHandlerRejectsDisallowedOrigin(t *testing.T) {
 	if response == nil || response.StatusCode != http.StatusForbidden {
 		t.Fatalf("response = %v, want HTTP 403", response)
 	}
+}
+
+func TestEventConnectionsCloseRegisteredConnectionsOnShutdown(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	bus := applicationevent.NewBus()
+	policy := domainauthorization.NewPolicy(userHandlerMemberships{})
+	connections := newEventConnections()
+	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, domainuser.User{
+			ID: "super", Status: "active", SuperAdmin: true,
+		}))
+		eventHandler(bus, policy, connections).ServeHTTP(writer, request)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	connection, _, err := websocket.DefaultDialer.Dial("ws"+server.URL[len("http"):], websocketHeader("http://localhost:4173"))
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		connections.mutex.Lock()
+		activeConnections := len(connections.connections)
+		connections.mutex.Unlock()
+		if activeConnections == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("websocket connection was not registered")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	connections.closeAll()
+	_ = connection.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err := connection.ReadMessage(); err == nil {
+		t.Fatal("websocket remained open after shutdown")
+	}
+	_ = connection.Close()
 }
 
 func websocketHeader(origin string) http.Header {

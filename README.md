@@ -16,7 +16,8 @@ go run ./cmd/seed
 
 O servidor le `PORT`, `APP_ENV`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
 `DB_PASSWORD`, `DB_TLS`, `OIDC_ISSUER`, `OIDC_AUDIENCE`,
-`AUTH_REQUIRE_VERIFIED_EMAIL`, `BOOTSTRAP_SUPER_ADMIN_EMAIL` e `CORS_ORIGINS`.
+`AUTH_REQUIRE_VERIFIED_EMAIL`, `RATE_LIMIT_PER_MINUTE`,
+`BOOTSTRAP_SUPER_ADMIN_EMAIL` e `CORS_ORIGINS`.
 `AUTH_REQUIRE_VERIFIED_EMAIL` padrao para `true` em producao e `false` fora
 dela; defina explicitamente `true`/`false` para substituir esse padrao. Para
 Supabase Auth, configure

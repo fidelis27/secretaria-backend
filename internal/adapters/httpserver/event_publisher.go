@@ -23,3 +23,12 @@ func publishDomainEventBestEffort(ctx context.Context, service applicationevent.
 	}
 	return true
 }
+
+func mutationAuditPayload(actorID string, targetID string, before any, after any) map[string]any {
+	return map[string]any{
+		"actorId":  actorID,
+		"targetId": targetID,
+		"before":   before,
+		"after":    after,
+	}
+}

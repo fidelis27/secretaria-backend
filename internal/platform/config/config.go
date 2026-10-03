@@ -20,6 +20,7 @@ type Config struct {
 	OIDCIssuer               string
 	OIDCAudience             string
 	AuthRequireVerifiedEmail bool
+	RateLimitPerMinute       int
 	BootstrapSuperAdminEmail string
 }
 
@@ -47,6 +48,13 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	rateLimitPerMinute, err := envInt("RATE_LIMIT_PER_MINUTE", 120)
+	if err != nil {
+		return Config{}, err
+	}
+	if rateLimitPerMinute < 1 {
+		return Config{}, fmt.Errorf("RATE_LIMIT_PER_MINUTE must be greater than zero")
+	}
 
 	return Config{
 		Port:                     port,
@@ -61,6 +69,7 @@ func Load() (Config, error) {
 		OIDCIssuer:               os.Getenv("OIDC_ISSUER"),
 		OIDCAudience:             envString("OIDC_AUDIENCE", "authenticated"),
 		AuthRequireVerifiedEmail: authRequireVerifiedEmail,
+		RateLimitPerMinute:       rateLimitPerMinute,
 		BootstrapSuperAdminEmail: strings.TrimSpace(os.Getenv("BOOTSTRAP_SUPER_ADMIN_EMAIL")),
 	}, nil
 }

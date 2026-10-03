@@ -41,3 +41,10 @@ func TestLoadAuthRequireVerifiedEmailCanBeConfigured(t *testing.T) {
 		t.Fatal("invalid AUTH_REQUIRE_VERIFIED_EMAIL value should be rejected")
 	}
 }
+
+func TestLoadRejectsInvalidRateLimit(t *testing.T) {
+	t.Setenv("RATE_LIMIT_PER_MINUTE", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("zero RATE_LIMIT_PER_MINUTE should be rejected")
+	}
+}

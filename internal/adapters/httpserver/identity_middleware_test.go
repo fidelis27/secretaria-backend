@@ -225,6 +225,9 @@ func TestIdentityMiddlewareEmailVerificationPolicy(t *testing.T) {
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
 			}
+			if test.wantStatus == http.StatusNoContent && recorder.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal("authenticated response is missing Cache-Control: no-store")
+			}
 		})
 	}
 }

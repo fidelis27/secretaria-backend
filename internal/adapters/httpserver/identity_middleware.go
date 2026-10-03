@@ -79,6 +79,7 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 			return
 		}
 		user.SuperAdmin = user.SuperAdmin && hasIdentityRole(claims, "super_admin")
+		writer.Header().Set("Cache-Control", "no-store")
 
 		ctx := context.WithValue(request.Context(), identityContextKey{}, user)
 		ctx = context.WithValue(ctx, identityClaimsContextKey{}, claims)

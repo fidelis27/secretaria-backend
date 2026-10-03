@@ -119,7 +119,20 @@ func groupMembershipUpdateHandler(groups applicationgroup.Service, policy domain
 			writeError(writer, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
-		updated, err := groups.UpdateMembershipRole(request.Context(), group.ID, request.PathValue("userId"), input.Role)
+		targetID := request.PathValue("userId")
+		memberships, err := groups.ListMemberships(request.Context(), group.ID)
+		if err != nil {
+			writeServiceError(writer, err, "could not load membership before update")
+			return
+		}
+		var beforeRole domainauthorization.Role
+		for _, membership := range memberships {
+			if membership.UserID == targetID {
+				beforeRole = membership.Role
+				break
+			}
+		}
+		updated, err := groups.UpdateMembershipRole(request.Context(), group.ID, targetID, input.Role)
 		if errors.Is(err, domaingroup.ErrUserIDRequired) || errors.Is(err, domaingroup.ErrGroupIDRequired) || errors.Is(err, domaingroup.ErrInvalidRole) {
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
@@ -136,10 +149,8 @@ func groupMembershipUpdateHandler(groups applicationgroup.Service, policy domain
 			writeServiceError(writer, err, "could not update membership")
 			return
 		}
-		if err := publishDomainEvent(request.Context(), events, "GROUP_MEMBERSHIP_UPDATED", "backend.group", request.Header.Get("x-correlation-id"), []string{group.InstitutionID}, updated); err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not publish membership update event")
-			return
-		}
+		actor, _ := userFromContext(request.Context())
+		publishDomainEventBestEffort(request.Context(), events, "GROUP_MEMBERSHIP_UPDATED", "backend.group", request.Header.Get("x-correlation-id"), []string{group.InstitutionID}, mutationAuditPayload(actor.ID, targetID, map[string]any{"role": beforeRole}, map[string]any{"role": updated.Role}))
 		writeJSON(writer, http.StatusOK, updated)
 	})
 }
@@ -151,6 +162,18 @@ func groupMembershipDeleteHandler(groups applicationgroup.Service, policy domain
 			return
 		}
 		userID := request.PathValue("userId")
+		memberships, err := groups.ListMemberships(request.Context(), group.ID)
+		if err != nil {
+			writeServiceError(writer, err, "could not load membership before removal")
+			return
+		}
+		var beforeRole domainauthorization.Role
+		for _, membership := range memberships {
+			if membership.UserID == userID {
+				beforeRole = membership.Role
+				break
+			}
+		}
 		if err := groups.RemoveMembership(request.Context(), group.ID, userID); err != nil {
 			if errors.Is(err, domaingroup.ErrUserIDRequired) || errors.Is(err, domaingroup.ErrGroupIDRequired) {
 				writeError(writer, http.StatusBadRequest, err.Error())
@@ -167,14 +190,8 @@ func groupMembershipDeleteHandler(groups applicationgroup.Service, policy domain
 			writeServiceError(writer, err, "could not remove membership")
 			return
 		}
-		if err := publishDomainEvent(request.Context(), events, "GROUP_MEMBERSHIP_REMOVED", "backend.group", request.Header.Get("x-correlation-id"), []string{group.InstitutionID}, map[string]string{
-			"groupId":       group.ID,
-			"institutionId": group.InstitutionID,
-			"userId":        userID,
-		}); err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not publish membership removal event")
-			return
-		}
+		actor, _ := userFromContext(request.Context())
+		publishDomainEventBestEffort(request.Context(), events, "GROUP_MEMBERSHIP_REMOVED", "backend.group", request.Header.Get("x-correlation-id"), []string{group.InstitutionID}, mutationAuditPayload(actor.ID, userID, map[string]any{"role": beforeRole}, nil))
 		writer.WriteHeader(http.StatusNoContent)
 	})
 }

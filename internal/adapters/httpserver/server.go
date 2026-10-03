@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -25,12 +26,14 @@ import (
 )
 
 type Server struct {
-	httpServer *http.Server
+	httpServer       *http.Server
+	eventConnections *eventConnections
 }
 
-func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy, verifier identityTokenVerifier, requireVerifiedEmail bool) *Server {
+func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy, verifier identityTokenVerifier, requireVerifiedEmail bool, rateLimitPerMinute int) *Server {
 	mux := http.NewServeMux()
 	metrics := newRequestMetrics()
+	websocketConnections := newEventConnections()
 	mux.Handle("GET /health", healthHandler(healthService))
 	mux.HandleFunc("GET /institutions", func(writer http.ResponseWriter, request *http.Request) {
 		user, _ := userFromContext(request.Context())
@@ -129,7 +132,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 		publishDomainEventBestEffort(request.Context(), eventService, "STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), []string{created.InstitutionID}, created)
 		writeJSON(writer, http.StatusCreated, created)
 	})
-	mux.Handle("GET /events", eventHandler(eventBus, policy))
+	mux.Handle("GET /events", eventHandler(eventBus, policy, websocketConnections))
 	mux.Handle("GET /metrics", metricsHandler(metrics))
 	mux.Handle("GET /events/history", eventHistoryHandler(eventService, policy))
 	mux.HandleFunc("GET /enrollments", func(writer http.ResponseWriter, request *http.Request) {
@@ -295,8 +298,15 @@ func New(addr string, healthService health.Service, institutionService applicati
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "active"})
 	})
 
+	handler := securityHeaders(corsMiddleware(identityMiddleware(
+		rateLimitMiddleware(mux, newRequestRateLimiter(rateLimitPerMinute)),
+		userService,
+		verifier,
+		requireVerifiedEmail,
+	)))
 	return &Server{
-		httpServer: newHTTPServer(addr, observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService, verifier, requireVerifiedEmail)), slog.Default(), metrics)),
+		httpServer:       newHTTPServer(addr, observabilityMiddleware(handler, slog.Default(), metrics)),
+		eventConnections: websocketConnections,
 	}
 }
 
@@ -419,5 +429,14 @@ func writeServiceError(writer http.ResponseWriter, err error, fallback string) {
 }
 
 func (server *Server) ListenAndServe() error {
-	return server.httpServer.ListenAndServe()
+	err := server.httpServer.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func (server *Server) Shutdown(ctx context.Context) error {
+	server.eventConnections.closeAll()
+	return server.httpServer.Shutdown(ctx)
 }

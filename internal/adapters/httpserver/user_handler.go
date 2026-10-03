@@ -106,10 +106,12 @@ func userUpdateHandler(users applicationuser.Service, policy domainauthorization
 			writeServiceError(writer, err, "could not update user")
 			return
 		}
-		if err := publishDomainEvent(request.Context(), events, "USER_UPDATED", "backend.user", request.Header.Get("x-correlation-id"), nil, updated); err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not publish user update event")
-			return
-		}
+		publishDomainEventBestEffort(request.Context(), events, "USER_UPDATED", "backend.user", request.Header.Get("x-correlation-id"), nil, mutationAuditPayload(
+			currentUser.ID,
+			targetUser.ID,
+			map[string]any{"name": targetUser.Name, "status": targetUser.Status, "superAdmin": targetUser.SuperAdmin},
+			map[string]any{"name": updated.Name, "status": updated.Status, "superAdmin": updated.SuperAdmin},
+		))
 		writeJSON(writer, http.StatusOK, updated)
 	})
 }
