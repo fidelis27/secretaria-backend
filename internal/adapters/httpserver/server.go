@@ -175,6 +175,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeServiceError(writer, err, "could not create enrollment")
 			return
 		}
+		publishDomainEventBestEffort(request.Context(), eventService, "ENROLLMENT_CREATED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{created.InstitutionID}, created)
 		writeJSON(writer, http.StatusCreated, created)
 	})
 	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/transfer", func(writer http.ResponseWriter, request *http.Request) {

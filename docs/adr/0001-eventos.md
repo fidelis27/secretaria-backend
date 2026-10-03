@@ -6,7 +6,7 @@ Aceita como alternativa temporaria ao outbox transacional.
 
 ## Decisao
 
-Nas rotas de criacao de estudante e de transferencia, suspensao e reabertura de matricula, uma falha ao persistir/publicar o evento e registrada no log, mas nao altera a resposta de sucesso da escrita concluida.
+Nas rotas de criacao de estudante, criacao de matricula e transferencia, suspensao e reabertura de matricula, uma falha ao persistir/publicar o evento e registrada no log, mas nao altera a resposta de sucesso da escrita concluida.
 
 ## Contexto
 

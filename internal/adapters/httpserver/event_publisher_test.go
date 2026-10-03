@@ -16,6 +16,23 @@ type failingEventRepository struct {
 	err error
 }
 
+type recordingEventRepository struct {
+	events []domainevent.Event
+}
+
+func (repository *recordingEventRepository) Save(_ context.Context, event domainevent.Event) error {
+	repository.events = append(repository.events, event)
+	return nil
+}
+
+func (*recordingEventRepository) List(context.Context, int) ([]domainevent.Event, error) {
+	return nil, nil
+}
+
+func (*recordingEventRepository) ListByInstitutionIDs(context.Context, int, []string) ([]domainevent.Event, error) {
+	return nil, nil
+}
+
 func (repository failingEventRepository) Save(context.Context, domainevent.Event) error {
 	return repository.err
 }
@@ -58,5 +75,25 @@ func TestMutationAuditPayloadIncludesActorTargetAndBeforeAfter(t *testing.T) {
 	}
 	if payload["before"].(map[string]any)["role"] != "member" || payload["after"].(map[string]any)["role"] != "admin" {
 		t.Fatalf("audit before/after values missing: %#v", payload)
+	}
+}
+
+func TestPublishDomainEventPersistsEnrollmentCreation(t *testing.T) {
+	repository := &recordingEventRepository{}
+	service := applicationevent.NewService(repository, applicationevent.NewBus())
+	enrollment := map[string]string{
+		"id":            "enrollment-1",
+		"studentId":     "student-1",
+		"institutionId": "institution-1",
+	}
+
+	if published := publishDomainEventBestEffort(context.Background(), service, "ENROLLMENT_CREATED", "backend.enrollment", "correlation-1", []string{"institution-1"}, enrollment); !published {
+		t.Fatal("expected enrollment creation event to be persisted")
+	}
+	if len(repository.events) != 1 || repository.events[0].Type != "ENROLLMENT_CREATED" {
+		t.Fatalf("persisted events = %#v, want one ENROLLMENT_CREATED event", repository.events)
+	}
+	if len(repository.events[0].InstitutionIDs) != 1 || repository.events[0].InstitutionIDs[0] != "institution-1" {
+		t.Fatalf("event scope = %#v, want institution-1", repository.events[0].InstitutionIDs)
 	}
 }
