@@ -126,10 +126,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeServiceError(writer, err, "could not create student")
 			return
 		}
-		if err := publishDomainEvent(request.Context(), eventService, "STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), []string{created.InstitutionID}, created); err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not publish student event")
-			return
-		}
+		publishDomainEventBestEffort(request.Context(), eventService, "STUDENT_CREATED", "backend.student", request.Header.Get("x-correlation-id"), []string{created.InstitutionID}, created)
 		writeJSON(writer, http.StatusCreated, created)
 	})
 	mux.Handle("GET /events", eventHandler(eventBus, policy))
@@ -210,15 +207,12 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeServiceError(writer, err, "could not transfer enrollment")
 			return
 		}
-		if err := publishDomainEvent(request.Context(), eventService, "STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID, created.InstitutionID}, map[string]string{
+		publishDomainEventBestEffort(request.Context(), eventService, "STUDENT_TRANSFERRED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID, created.InstitutionID}, map[string]string{
 			"studentId":             request.PathValue("studentId"),
 			"sourceEnrollment":      request.PathValue("enrollmentId"),
 			"destinationEnrollment": created.ID,
 			"institutionId":         created.InstitutionID,
-		}); err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not publish transfer event")
-			return
-		}
+		})
 		writeJSON(writer, http.StatusCreated, created)
 	})
 	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/suspend", func(writer http.ResponseWriter, request *http.Request) {
@@ -260,15 +254,12 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeServiceError(writer, err, "could not suspend enrollment")
 			return
 		}
-		if err := publishDomainEvent(request.Context(), eventService, "ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
+		publishDomainEventBestEffort(request.Context(), eventService, "ENROLLMENT_SUSPENDED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
 			"studentId":    request.PathValue("studentId"),
 			"enrollmentId": request.PathValue("enrollmentId"),
 			"reason":       input.Reason,
 			"date":         input.Date,
-		}); err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not publish suspension event")
-			return
-		}
+		})
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "suspended"})
 	})
 	mux.HandleFunc("POST /students/{studentId}/enrollments/{enrollmentId}/reopen", func(writer http.ResponseWriter, request *http.Request) {
@@ -297,13 +288,10 @@ func New(addr string, healthService health.Service, institutionService applicati
 			writeServiceError(writer, err, "could not reopen enrollment")
 			return
 		}
-		if err := publishDomainEvent(request.Context(), eventService, "ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
+		publishDomainEventBestEffort(request.Context(), eventService, "ENROLLMENT_REOPENED", "backend.enrollment", request.Header.Get("x-correlation-id"), []string{existing.InstitutionID}, map[string]string{
 			"studentId":    request.PathValue("studentId"),
 			"enrollmentId": request.PathValue("enrollmentId"),
-		}); err != nil {
-			writeError(writer, http.StatusInternalServerError, "could not publish reopening event")
-			return
-		}
+		})
 		writeJSON(writer, http.StatusOK, map[string]string{"status": "active"})
 	})
 
