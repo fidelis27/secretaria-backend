@@ -28,7 +28,7 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy, verifier identityTokenVerifier) *Server {
+func New(addr string, healthService health.Service, institutionService applicationinstitution.Service, userService applicationuser.Service, studentService applicationstudent.Service, enrollmentService applicationenrollment.Service, eventService applicationevent.Service, eventBus *applicationevent.Bus, groupService applicationgroup.Service, policy domainauthorization.Policy, verifier identityTokenVerifier, requireVerifiedEmail bool) *Server {
 	mux := http.NewServeMux()
 	metrics := newRequestMetrics()
 	mux.Handle("GET /health", healthHandler(healthService))
@@ -296,7 +296,7 @@ func New(addr string, healthService health.Service, institutionService applicati
 	})
 
 	return &Server{
-		httpServer: newHTTPServer(addr, observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService, verifier)), slog.Default(), metrics)),
+		httpServer: newHTTPServer(addr, observabilityMiddleware(corsMiddleware(identityMiddleware(mux, userService, verifier, requireVerifiedEmail)), slog.Default(), metrics)),
 	}
 }
 

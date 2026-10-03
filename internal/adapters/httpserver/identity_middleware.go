@@ -14,10 +14,11 @@ type identityContextKey struct{}
 type identityClaimsContextKey struct{}
 
 type IdentityClaims struct {
-	Subject     string   `json:"sub"`
-	Email       string   `json:"email"`
-	Roles       []string `json:"roles"`
-	AppMetadata struct {
+	Subject       string   `json:"sub"`
+	Email         string   `json:"email"`
+	EmailVerified *bool    `json:"email_verified"`
+	Roles         []string `json:"roles"`
+	AppMetadata   struct {
 		Roles []string `json:"roles"`
 	} `json:"app_metadata"`
 }
@@ -26,7 +27,7 @@ type identityTokenVerifier interface {
 	Verify(context.Context, string) (IdentityClaims, error)
 }
 
-func identityMiddleware(next http.Handler, users applicationuser.Service, verifier identityTokenVerifier) http.Handler {
+func identityMiddleware(next http.Handler, users applicationuser.Service, verifier identityTokenVerifier, requireVerifiedEmail bool) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			next.ServeHTTP(writer, request)
@@ -41,6 +42,10 @@ func identityMiddleware(next http.Handler, users applicationuser.Service, verifi
 		claims, err := verifier.Verify(request.Context(), token)
 		if err != nil || strings.TrimSpace(claims.Subject) == "" || strings.TrimSpace(claims.Email) == "" {
 			writeError(writer, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if (claims.EmailVerified != nil && !*claims.EmailVerified) || (requireVerifiedEmail && claims.EmailVerified == nil) {
+			writeError(writer, http.StatusForbidden, "email address is not verified")
 			return
 		}
 		subject := strings.TrimSpace(claims.Subject)
@@ -90,11 +95,19 @@ func bearerToken(request *http.Request) string {
 		}
 	}
 	if websocketRequest(request) {
-		for _, protocol := range strings.Split(request.Header.Get("Sec-WebSocket-Protocol"), ",") {
-			protocol = strings.TrimSpace(protocol)
-			if strings.HasPrefix(protocol, "bearer.") {
-				return strings.TrimPrefix(protocol, "bearer.")
-			}
+		return strings.TrimPrefix(websocketBearerProtocol(request), "bearer.")
+	}
+	return ""
+}
+
+func websocketBearerProtocol(request *http.Request) string {
+	if !websocketRequest(request) {
+		return ""
+	}
+	for _, protocol := range strings.Split(request.Header.Get("Sec-WebSocket-Protocol"), ",") {
+		protocol = strings.TrimSpace(protocol)
+		if strings.HasPrefix(protocol, "bearer.") && len(protocol) > len("bearer.") {
+			return protocol
 		}
 	}
 	return ""

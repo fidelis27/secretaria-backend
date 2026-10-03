@@ -16,6 +16,7 @@ import (
 )
 
 func TestEventHandlerDeliversPublishedEvent(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	bus := applicationevent.NewBus()
 	policy := domainauthorization.NewPolicy(userHandlerMemberships{})
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -27,7 +28,8 @@ func TestEventHandlerDeliversPublishedEvent(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	connection, _, err := websocket.DefaultDialer.Dial("ws"+server.URL[len("http"):], nil)
+	dialer := websocket.Dialer{Proxy: websocket.DefaultDialer.Proxy, HandshakeTimeout: websocket.DefaultDialer.HandshakeTimeout}
+	connection, _, err := dialer.Dial("ws"+server.URL[len("http"):], websocketHeader("http://localhost:4173"))
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)
 	}
@@ -43,6 +45,59 @@ func TestEventHandlerDeliversPublishedEvent(t *testing.T) {
 	if got.EventID != want.EventID || got.Type != want.Type || got.Version != want.Version {
 		t.Fatalf("event = %+v, want %+v", got, want)
 	}
+}
+
+func TestEventHandlerNegotiatesBearerSubprotocol(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	bus := applicationevent.NewBus()
+	policy := domainauthorization.NewPolicy(userHandlerMemberships{})
+	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, domainuser.User{
+			ID: "super", Status: "active", SuperAdmin: true,
+		}))
+		eventHandler(bus, policy).ServeHTTP(writer, request)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	const bearerProtocol = "bearer.test-access-token"
+	dialer := websocket.Dialer{Subprotocols: []string{bearerProtocol}}
+	connection, _, err := dialer.Dial("ws"+server.URL[len("http"):], websocketHeader("http://localhost:4173"))
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer connection.Close()
+
+	if got := connection.Subprotocol(); got != bearerProtocol {
+		t.Fatalf("subprotocol = %q, want %q", got, bearerProtocol)
+	}
+}
+
+func TestEventHandlerRejectsDisallowedOrigin(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("CORS_ORIGINS", "https://app.example.com")
+	bus := applicationevent.NewBus()
+	policy := domainauthorization.NewPolicy(userHandlerMemberships{})
+	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		request = request.WithContext(context.WithValue(request.Context(), identityContextKey{}, domainuser.User{
+			ID: "super", Status: "active", SuperAdmin: true,
+		}))
+		eventHandler(bus, policy).ServeHTTP(writer, request)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	_, response, err := websocket.DefaultDialer.Dial("ws"+server.URL[len("http"):], websocketHeader("https://untrusted.example"))
+	if err == nil {
+		t.Fatal("expected websocket handshake to reject the untrusted origin")
+	}
+	if response == nil || response.StatusCode != http.StatusForbidden {
+		t.Fatalf("response = %v, want HTTP 403", response)
+	}
+}
+
+func websocketHeader(origin string) http.Header {
+	return http.Header{"Origin": []string{origin}}
 }
 
 func TestEventVisibleToInstitutionsFiltersOtherScopes(t *testing.T) {

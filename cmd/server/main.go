@@ -66,7 +66,7 @@ func main() {
 	groupRepository := mariadb.NewGroupRepository(database)
 	groupService := applicationgroup.NewService(groupRepository)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, groupService, policy, identityVerifier)
+	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, groupService, policy, identityVerifier, appConfig.AuthRequireVerifiedEmail)
 	slog.Info("server listening", "address", address)
 	if err := server.ListenAndServe(); err != nil {
 		slog.Error("server stopped", "error", err)

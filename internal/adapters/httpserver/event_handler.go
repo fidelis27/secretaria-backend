@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -13,9 +14,16 @@ import (
 var eventUpgrader = websocket.Upgrader{
 	CheckOrigin: func(request *http.Request) bool {
 		origin := request.Header.Get("Origin")
-		return origin == "" || isLocalFrontendOrigin(origin)
+		return isLocalFrontendOrigin(origin)
 	},
 }
+
+const (
+	websocketWriteWait = 10 * time.Second
+	websocketPongWait  = 60 * time.Second
+	websocketPingEvery = (websocketPongWait * 9) / 10
+	websocketReadLimit = 1024
+)
 
 func eventHandler(bus *applicationevent.Bus, policy domainauthorization.Policy) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -31,11 +39,32 @@ func eventHandler(bus *applicationevent.Bus, policy domainauthorization.Policy) 
 		}
 		subscriber, cancel := bus.Subscribe()
 		defer cancel()
-		connection, err := eventUpgrader.Upgrade(writer, request, nil)
+		responseHeaders := http.Header{}
+		if protocol := websocketBearerProtocol(request); protocol != "" {
+			responseHeaders.Set("Sec-WebSocket-Protocol", protocol)
+		}
+		connection, err := eventUpgrader.Upgrade(writer, request, responseHeaders)
 		if err != nil {
 			return
 		}
 		defer connection.Close()
+		connection.SetReadLimit(websocketReadLimit)
+		_ = connection.SetReadDeadline(time.Now().Add(websocketPongWait))
+		connection.SetPongHandler(func(string) error {
+			return connection.SetReadDeadline(time.Now().Add(websocketPongWait))
+		})
+
+		readErrors := make(chan error, 1)
+		go func() {
+			for {
+				if _, _, err := connection.ReadMessage(); err != nil {
+					readErrors <- err
+					return
+				}
+			}
+		}()
+		pingTicker := time.NewTicker(websocketPingEvery)
+		defer pingTicker.Stop()
 
 		for {
 			select {
@@ -46,9 +75,16 @@ func eventHandler(bus *applicationevent.Bus, policy domainauthorization.Policy) 
 				if !user.SuperAdmin && !eventVisibleToInstitutions(event, visibleIDs) {
 					continue
 				}
+				_ = connection.SetWriteDeadline(time.Now().Add(websocketWriteWait))
 				if err := connection.WriteJSON(event); err != nil {
 					return
 				}
+			case <-pingTicker.C:
+				if err := connection.WriteControl(websocket.PingMessage, nil, time.Now().Add(websocketWriteWait)); err != nil {
+					return
+				}
+			case <-readErrors:
+				return
 			case <-request.Context().Done():
 				return
 			}
