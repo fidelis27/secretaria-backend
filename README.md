@@ -7,6 +7,8 @@ os frontends ficam no repositorio `mfe-communication`.
 
 ```bash
 go test ./...
+go vet ./...
+go test -cover ./...
 go run ./cmd/server
 go run ./cmd/migrate
 go run ./cmd/seed
@@ -31,6 +33,24 @@ esse e-mail) de forma idempotente. Configure `CORS_ORIGINS` com a lista
 explicita de frontends autorizados; `localhost`/`127.0.0.1` so entram
 automaticamente quando `APP_ENV != production`. `GET /health` retorna `200`
 quando o banco esta disponivel e `503` quando a verificacao falha.
+
+### Variaveis de ambiente
+
+| Variavel | Obrigatoria | Padrao | Uso |
+|---|---:|---|---|
+| `PORT` | nao | `3333` | Porta HTTP. |
+| `APP_ENV` | nao | `development` | Determina defaults e permissoes locais de CORS. |
+| `DB_HOST`, `DB_NAME`, `DB_USER` | sim | — | Conexao MariaDB. |
+| `DB_PORT` | nao | `3306` | Porta MariaDB. |
+| `DB_PASSWORD` | depende do banco | vazio | Senha do banco; manter em secret manager. |
+| `DB_TLS` | nao | `false` | Habilita TLS para MariaDB. |
+| `DB_TLS_SKIP_VERIFY` | nao | `false` | Desabilita verificacao TLS; nao usar em producao. |
+| `OIDC_ISSUER` | sim | — | Issuer OIDC Supabase, incluindo `/auth/v1`. |
+| `OIDC_AUDIENCE` | nao | `authenticated` | Audience permitida para tokens. |
+| `AUTH_REQUIRE_VERIFIED_EMAIL` | nao | `true` em producao, senao `false` | Exige claim superior `email_verified: true`. |
+| `RATE_LIMIT_PER_MINUTE` | nao | `120` | Capacidade e taxa de reposicao do bucket por usuario/IP. |
+| `CORS_ORIGINS` | producao | vazio | Lista separada por virgulas de Origins autorizadas. |
+| `BOOTSTRAP_SUPER_ADMIN_EMAIL` | nao | vazio | Conta usada somente se nao existir superadmin local. |
 
 As migrations versionadas sao aplicadas com `go run ./cmd/migrate`. O comando
 cria `schema_migrations`, aplica os arquivos SQL em ordem e ignora versoes ja
@@ -63,6 +83,11 @@ apenas contas que correspondam a usuarios ativos locais. O vinculo principal pas
 de um usuario legado, grava o `sub` do token no cadastro local.
 Para conceder `super_admin`, configure `app_metadata.roles` no Supabase e a
 marca local de superadmin; ambas precisam estar presentes.
+
+Para conferir a verificacao de e-mail, use uma conta de teste e decodifique o
+payload JWT localmente para verificar se `email_verified` existe no nivel
+superior e e booleano `true`. Nao envie access tokens a sites externos nem os
+registre em tickets/logs.
 
 ```bash
 curl -H "Authorization: Bearer <access-token>" http://localhost:3333/institutions
