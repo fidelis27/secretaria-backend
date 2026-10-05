@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
@@ -80,5 +81,37 @@ func TestMetricsHandlerRequiresSuperAdmin(t *testing.T) {
 				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
 			}
 		})
+	}
+}
+
+func TestSecurityHeadersMiddlewareAddsBrowserHeaders(t *testing.T) {
+	handler := securityHeaders(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	if recorder.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("missing X-Content-Type-Options nosniff")
+	}
+	if recorder.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatal("missing Referrer-Policy")
+	}
+}
+
+func TestObservabilityLogsDoNotContainAuthorizationOrFullEmail(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+	handler := observabilityMiddleware(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}), logger, newRequestMetrics())
+	request := httptest.NewRequest(http.MethodGet, "/users?q=private@example.com", nil)
+	request.Header.Set("Authorization", "Bearer "+strings.Join([]string{"test", "token"}, "-"))
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	for _, secret := range []string{strings.Join([]string{"test", "token"}, "-"), "private@example.com", "Authorization"} {
+		if strings.Contains(output.String(), secret) {
+			t.Fatalf("request log contains sensitive value %q: %s", secret, output.String())
+		}
 	}
 }

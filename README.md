@@ -7,6 +7,8 @@ os frontends ficam no repositorio `mfe-communication`.
 
 ```bash
 go test ./...
+go vet ./...
+go test -cover ./...
 go run ./cmd/server
 go run ./cmd/migrate
 go run ./cmd/seed
@@ -16,7 +18,11 @@ go run ./cmd/seed
 
 O servidor le `PORT`, `APP_ENV`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
 `DB_PASSWORD`, `DB_TLS`, `OIDC_ISSUER`, `OIDC_AUDIENCE`,
-`BOOTSTRAP_SUPER_ADMIN_EMAIL` e `CORS_ORIGINS`. Para Supabase Auth, configure
+`AUTH_REQUIRE_VERIFIED_EMAIL`, `RATE_LIMIT_PER_MINUTE`,
+`BOOTSTRAP_SUPER_ADMIN_EMAIL` e `CORS_ORIGINS`.
+`AUTH_REQUIRE_VERIFIED_EMAIL` padrao para `true` em producao e `false` fora
+dela; defina explicitamente `true`/`false` para substituir esse padrao. Para
+Supabase Auth, configure
 `OIDC_ISSUER` com `https://<project-ref>.supabase.co/auth/v1` e deixe
 `OIDC_AUDIENCE=authenticated`. A inicializacao descobre a configuracao OIDC e as
 chaves JWKS do projeto; use uma chave de assinatura assimetrica (por exemplo,
@@ -27,6 +33,24 @@ esse e-mail) de forma idempotente. Configure `CORS_ORIGINS` com a lista
 explicita de frontends autorizados; `localhost`/`127.0.0.1` so entram
 automaticamente quando `APP_ENV != production`. `GET /health` retorna `200`
 quando o banco esta disponivel e `503` quando a verificacao falha.
+
+### Variaveis de ambiente
+
+| Variavel | Obrigatoria | Padrao | Uso |
+|---|---:|---|---|
+| `PORT` | nao | `3333` | Porta HTTP. |
+| `APP_ENV` | nao | `development` | Determina defaults e permissoes locais de CORS. |
+| `DB_HOST`, `DB_NAME`, `DB_USER` | sim | — | Conexao MariaDB. |
+| `DB_PORT` | nao | `3306` | Porta MariaDB. |
+| `DB_PASSWORD` | depende do banco | vazio | Senha do banco; manter em secret manager. |
+| `DB_TLS` | nao | `false` | Habilita TLS para MariaDB. |
+| `DB_TLS_SKIP_VERIFY` | nao | `false` | Desabilita verificacao TLS; nao usar em producao. |
+| `OIDC_ISSUER` | sim | — | Issuer OIDC Supabase, incluindo `/auth/v1`. |
+| `OIDC_AUDIENCE` | nao | `authenticated` | Audience permitida para tokens. |
+| `AUTH_REQUIRE_VERIFIED_EMAIL` | nao | `true` em producao, senao `false` | Exige claim superior `email_verified: true`. |
+| `RATE_LIMIT_PER_MINUTE` | nao | `120` | Capacidade e taxa de reposicao do bucket por usuario/IP. |
+| `CORS_ORIGINS` | producao | vazio | Lista separada por virgulas de Origins autorizadas. |
+| `BOOTSTRAP_SUPER_ADMIN_EMAIL` | nao | vazio | Conta usada somente se nao existir superadmin local. |
 
 As migrations versionadas sao aplicadas com `go run ./cmd/migrate`. O comando
 cria `schema_migrations`, aplica os arquivos SQL em ordem e ignora versoes ja
@@ -46,15 +70,24 @@ novos ambientes, sendo substituida por `BOOTSTRAP_SUPER_ADMIN_EMAIL`.
 
 Todas as rotas, exceto `GET /health`, exigem access token Supabase no header
 Bearer. O backend valida assinatura, issuer, audience e expiracao via OIDC/JWKS
-e associa o subject/e-mail do token a um usuario ativo no banco. Desabilite o
-cadastro publico no Supabase: o backend nao exige mais `email_verified`, porque
-o Supabase nao envia esse claim de forma confiavel no topo do token e
-`user_metadata` e editavel pelo proprio usuario. Provisione apenas contas que
-correspondam a usuarios ativos locais. O vinculo principal passa a ser o
+e associa o subject/e-mail do token a um usuario ativo no banco. Desabilite o cadastro publico no Supabase e confira manualmente o payload de um
+access token de teste (decodificado localmente; nunca compartilhe o token) para
+confirmar o claim de topo `email_verified` (booleano). Quando
+`AUTH_REQUIRE_VERIFIED_EMAIL=true`, somente `email_verified: true` e aceito;
+`user_metadata.email_verified` nunca e consultado. A opcao e `true` por padrao
+em producao e `false` fora de producao. Se o projeto nao emitir o claim, ajuste
+o template/configuracao do Supabase ou defina explicitamente
+`AUTH_REQUIRE_VERIFIED_EMAIL=false` depois de avaliar o risco. Provisione
+apenas contas que correspondam a usuarios ativos locais. O vinculo principal passa a ser o
 `sub`: o backend procura primeiro por `users.auth_sub` e, na primeira entrada
 de um usuario legado, grava o `sub` do token no cadastro local.
 Para conceder `super_admin`, configure `app_metadata.roles` no Supabase e a
 marca local de superadmin; ambas precisam estar presentes.
+
+Para conferir a verificacao de e-mail, use uma conta de teste e decodifique o
+payload JWT localmente para verificar se `email_verified` existe no nivel
+superior e e booleano `true`. Nao envie access tokens a sites externos nem os
+registre em tickets/logs.
 
 ```bash
 curl -H "Authorization: Bearer <access-token>" http://localhost:3333/institutions
@@ -80,12 +113,16 @@ Sem token valido a API retorna `401`; usuarios sem cadastro ativo recebem `403`.
 
 ## Eventos
 
-O WebSocket `GET /events` exige token no subprotocolo `bearer.<access-token>` e transmite eventos com
+O WebSocket `GET /events` exige token no subprotocolo `bearer.<access-token>`,
+ecoado na resposta do handshake, e aceita somente Origins listadas em
+`CORS_ORIGINS` (ou loopback fora de producao). O servidor limita os frames a
+1 KiB, verifica atividade por ping/pong e transmite eventos com
 `eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` e
 `payload`. Eventos sao persistidos em `audit_events` antes da distribuicao.
 
 ## Desenvolvimento local
 
-Inicie MariaDB, configure as variaveis `DB_*` e `OIDC_*`, aplique as
+Inicie MariaDB, configure as variaveis `DB_*`, `OIDC_*` e
+`AUTH_REQUIRE_VERIFIED_EMAIL`, aplique as
 migrations e execute `go run ./cmd/server`. O guia do monorepo
 `mfe-communication` documenta a inicializacao coordenada dos MFEs e desta API.

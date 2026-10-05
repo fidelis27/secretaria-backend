@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/fidelis27/secretaria-backend/internal/adapters/httpserver"
 	"github.com/fidelis27/secretaria-backend/internal/adapters/mariadb"
@@ -66,10 +69,30 @@ func main() {
 	groupRepository := mariadb.NewGroupRepository(database)
 	groupService := applicationgroup.NewService(groupRepository)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, groupService, policy, identityVerifier)
+	server := httpserver.New(address, health.NewService(database), institutionService, userService, studentService, enrollmentService, eventService, eventBus, groupService, policy, identityVerifier, appConfig.AuthRequireVerifiedEmail, appConfig.RateLimitPerMinute)
 	slog.Info("server listening", "address", address)
-	if err := server.ListenAndServe(); err != nil {
-		slog.Error("server stopped", "error", err)
-		os.Exit(1)
+	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	serverErrors := make(chan error, 1)
+	go func() {
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErrors:
+		if err != nil {
+			slog.Error("server stopped unexpectedly", "error", err)
+			os.Exit(1)
+		}
+	case <-shutdownSignal.Done():
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownContext); err != nil {
+			slog.Error("graceful shutdown failed", "error", err)
+			os.Exit(1)
+		}
+		if err := <-serverErrors; err != nil {
+			slog.Error("server stopped during shutdown", "error", err)
+		}
 	}
 }
