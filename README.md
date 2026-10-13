@@ -1,128 +1,110 @@
 # Secretaria Backend
 
-API Go da Secretaria Escolar. Este repositorio contem o backend e suas migrations;
-os frontends ficam no repositorio `mfe-communication`.
+Go API for the School Secretariat platform: institutions, students, enrollments, groups and users, with scoped authorization and a real-time domain-event stream. The micro-frontends that consume it live in [`mfe-communication`](https://github.com/fidelis27/mfe-communication).
 
-## Comandos
+A Portuguese version with the full configuration reference is in [`README.pt.md`](README.pt.md).
+
+> **Status:** deployed prototype on Render. Hardened in several areas (see below), with the remaining gaps listed under [Known limitations](#known-limitations).
+
+## Stack
+
+Go 1.26, MariaDB, Supabase Auth (OIDC/JWKS), WebSocket, GitHub Actions. About 6.9k lines of Go across 77 files, including tests.
+
+## Architecture
+
+Hexagonal layering with dependencies pointing inward:
+
+```text
+cmd/                 server, migrate, seed (composition roots)
+internal/
+  domain/            entities and rules: authorization, enrollment, event,
+                     group, institution, student, user
+  application/       use cases and the in-process event bus
+  adapters/
+    httpserver/      handlers, middleware, WebSocket
+    mariadb/         repositories (behind domain interfaces)
+    oidc/            token verification
+  platform/          config, error catalog
+migrations/          10 versioned SQL migrations
+seeds/dev/           development-only seed data
+docs/adr/            architecture decision records
+```
+
+Repositories sit behind domain interfaces, `main` only wires dependencies, and business rules (including authorization) live in the domain layer rather than in SQL or handlers.
+
+## Authentication
+
+Every route except `GET /health` requires a Supabase access token as a Bearer token.
+
+- Signature, issuer, audience and expiry are verified through OIDC discovery and JWKS.
+- Only `RS256` and `ES256` are accepted, with a 30 second clock leeway. Calls to the issuer and JWKS endpoint are paced to one per second.
+- In production the top-level `email_verified` claim must be `true`. Editable `user_metadata` is never trusted.
+- Tokens are bound to a local active user by the stable `sub` (`users.auth_sub`). Unknown or inactive users get `403`, invalid tokens get `401`.
+
+## Authorization
+
+Roles are superadmin, admin and member, scoped by institution and group. The rules are in `internal/domain/authorization`, and handlers apply them before running an operation.
+
+- `super_admin` needs **both** the Supabase `app_metadata.roles` entry and the local superadmin flag.
+- Group admins cannot remove or demote the last admin of a group; the API answers `409`.
+- Listings (institutions, groups, events, event history) are filtered to the institutions the user can see.
+- Authorization is tested at **handler level**, not only at policy level, including privilege-escalation attempts.
+
+## Domain events
+
+Writes publish events with `eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` and `payload`.
+
+- Events are **persisted to `audit_events` in a transaction before** they are distributed.
+- `GET /events` is a WebSocket. The token travels in the `bearer.<token>` subprotocol (echoed in the handshake), only allowed origins connect, frames are capped at 1 KiB, ping/pong detects dead connections, and connections close on graceful shutdown.
+- `GET /events/history` returns persisted events, scoped by institution.
+
+## Security hardening
+
+| Area | What is in place |
+| --- | --- |
+| Abuse control | Token bucket per user/IP (default 120/min) with `Retry-After` |
+| Responses | `Cache-Control: no-store`, `nosniff`, `Referrer-Policy` |
+| Logging | Method, path without query, status, duration and correlation ID only; never the Authorization header or a full e-mail |
+| CORS | Explicit allowlist in production; loopback only outside production |
+| Migrations | A test fails if a new migration contains a literal e-mail address |
+
+[`docs/security-and-quality-review.md`](docs/security-and-quality-review.md) tracks each finding as problem, risk, fix, commit and covering test.
+
+## Data
+
+- Migrations are applied in order by `go run ./cmd/migrate` and recorded in `schema_migrations`.
+- Enrollment transfers close the origin enrollment and open the destination one inside a single database transaction, and keep the history.
+- Development seeds are separate from migrations and refuse to run when `APP_ENV=production`.
+
+## Running it
 
 ```bash
+go run ./cmd/migrate     # apply migrations
+go run ./cmd/seed        # dev seeds (non-production only)
+go run ./cmd/server      # start the API (default port 3333)
+
 go test ./...
 go vet ./...
-go test -cover ./...
-go run ./cmd/server
-go run ./cmd/migrate
-go run ./cmd/seed
+go test -race ./...
 ```
 
-## Configuracao
+Configuration is by environment variables (`DB_*`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, `AUTH_REQUIRE_VERIFIED_EMAIL`, `RATE_LIMIT_PER_MINUTE`, `CORS_ORIGINS`, `BOOTSTRAP_SUPER_ADMIN_EMAIL`). The full table is in [`README.pt.md`](README.pt.md).
 
-O servidor le `PORT`, `APP_ENV`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
-`DB_PASSWORD`, `DB_TLS`, `OIDC_ISSUER`, `OIDC_AUDIENCE`,
-`AUTH_REQUIRE_VERIFIED_EMAIL`, `RATE_LIMIT_PER_MINUTE`,
-`BOOTSTRAP_SUPER_ADMIN_EMAIL` e `CORS_ORIGINS`.
-`AUTH_REQUIRE_VERIFIED_EMAIL` padrao para `true` em producao e `false` fora
-dela; defina explicitamente `true`/`false` para substituir esse padrao. Para
-Supabase Auth, configure
-`OIDC_ISSUER` com `https://<project-ref>.supabase.co/auth/v1` e deixe
-`OIDC_AUDIENCE=authenticated`. A inicializacao descobre a configuracao OIDC e as
-chaves JWKS do projeto; use uma chave de assinatura assimetrica (por exemplo,
-ES256), pois chaves simetricas nao podem ser verificadas por uma chave publica.
-Se `BOOTSTRAP_SUPER_ADMIN_EMAIL` estiver definido e ainda nao existir nenhum
-superadmin local, o backend promove esse e-mail (ou cria um usuario local com
-esse e-mail) de forma idempotente. Configure `CORS_ORIGINS` com a lista
-explicita de frontends autorizados; `localhost`/`127.0.0.1` so entram
-automaticamente quando `APP_ENV != production`. `GET /health` retorna `200`
-quando o banco esta disponivel e `503` quando a verificacao falha.
+## Quality
 
-### Variaveis de ambiente
+- 87 test functions across domain, application, HTTP adapters, OIDC, config and migrations.
+- CI runs `go build`, `go vet` and `go test -race` on every PR.
 
-| Variavel | Obrigatoria | Padrao | Uso |
-|---|---:|---|---|
-| `PORT` | nao | `3333` | Porta HTTP. |
-| `APP_ENV` | nao | `development` | Determina defaults e permissoes locais de CORS. |
-| `DB_HOST`, `DB_NAME`, `DB_USER` | sim | — | Conexao MariaDB. |
-| `DB_PORT` | nao | `3306` | Porta MariaDB. |
-| `DB_PASSWORD` | depende do banco | vazio | Senha do banco; manter em secret manager. |
-| `DB_TLS` | nao | `false` | Habilita TLS para MariaDB. |
-| `DB_TLS_SKIP_VERIFY` | nao | `false` | Desabilita verificacao TLS; nao usar em producao. |
-| `OIDC_ISSUER` | sim | — | Issuer OIDC Supabase, incluindo `/auth/v1`. |
-| `OIDC_AUDIENCE` | nao | `authenticated` | Audience permitida para tokens. |
-| `AUTH_REQUIRE_VERIFIED_EMAIL` | nao | `true` em producao, senao `false` | Exige claim superior `email_verified: true`. |
-| `RATE_LIMIT_PER_MINUTE` | nao | `120` | Capacidade e taxa de reposicao do bucket por usuario/IP. |
-| `CORS_ORIGINS` | producao | vazio | Lista separada por virgulas de Origins autorizadas. |
-| `BOOTSTRAP_SUPER_ADMIN_EMAIL` | nao | vazio | Conta usada somente se nao existir superadmin local. |
+## Architecture decisions
 
-As migrations versionadas sao aplicadas com `go run ./cmd/migrate`. O comando
-cria `schema_migrations`, aplica os arquivos SQL em ordem e ignora versoes ja
-registradas. As migrations `004`, `006` e `007` foram mantidas apenas como
-historico de ambientes antigos e nao entram mais no caminho de producao; a
-migration `008` remove o usuario demo e a instituicao demo quando nao possuem
-vinculos. No Render, execute-o no Shell do servico depois de configurar as
-variaveis `DB_*`.
+| ADR | Decision |
+| --- | --- |
+| [0001](docs/adr/0001-eventos.md) | Event publication failures are logged and do not fail a write that already succeeded; a transactional outbox is the long-term fix |
+| [0002](docs/adr/0002-identidade.md) | Identity model |
+| [0003](docs/adr/0003-autorizacao.md) | Authorization by scope through domain policies |
 
-Seeds de desenvolvimento ficam em `seeds/dev` e devem ser aplicados com
-`go run ./cmd/seed` somente fora de producao (`APP_ENV != production`). O seed
-de superadmin demo e a instituicao `transfer-origin` sairam das migrations; a
-promocao fixa do e-mail pessoal da migration `007` nao e mais repetida em
-novos ambientes, sendo substituida por `BOOTSTRAP_SUPER_ADMIN_EMAIL`.
+## Known limitations
 
-## Autenticacao e autorizacao
-
-Todas as rotas, exceto `GET /health`, exigem access token Supabase no header
-Bearer. O backend valida assinatura, issuer, audience e expiracao via OIDC/JWKS
-e associa o subject/e-mail do token a um usuario ativo no banco. Desabilite o cadastro publico no Supabase e confira manualmente o payload de um
-access token de teste (decodificado localmente; nunca compartilhe o token) para
-confirmar o claim de topo `email_verified` (booleano). Quando
-`AUTH_REQUIRE_VERIFIED_EMAIL=true`, somente `email_verified: true` e aceito;
-`user_metadata.email_verified` nunca e consultado. A opcao e `true` por padrao
-em producao e `false` fora de producao. Se o projeto nao emitir o claim, ajuste
-o template/configuracao do Supabase ou defina explicitamente
-`AUTH_REQUIRE_VERIFIED_EMAIL=false` depois de avaliar o risco. Provisione
-apenas contas que correspondam a usuarios ativos locais. O vinculo principal passa a ser o
-`sub`: o backend procura primeiro por `users.auth_sub` e, na primeira entrada
-de um usuario legado, grava o `sub` do token no cadastro local.
-Para conceder `super_admin`, configure `app_metadata.roles` no Supabase e a
-marca local de superadmin; ambas precisam estar presentes.
-
-Para conferir a verificacao de e-mail, use uma conta de teste e decodifique o
-payload JWT localmente para verificar se `email_verified` existe no nivel
-superior e e booleano `true`. Nao envie access tokens a sites externos nem os
-registre em tickets/logs.
-
-```bash
-curl -H "Authorization: Bearer <access-token>" http://localhost:3333/institutions
-```
-
-Sem token valido a API retorna `401`; usuarios sem cadastro ativo recebem `403`.
-
-### Rotas administrativas
-
-- `GET /groups` retorna `id`, `institutionId`, `name` e `institutionName`.
-- `POST /groups` exige `{ "institutionId", "name" }`; nomes duplicados na mesma
-  instituicao retornam `409` com mensagem em pt-BR.
-- `GET /groups/{groupId}/members`, `POST /groups/{groupId}/members`,
-  `PATCH /groups/{groupId}/members/{userId}` e
-  `DELETE /groups/{groupId}/members/{userId}` retornam memberships com
-  `userName` e `userEmail`. O backend impede remover ou rebaixar o ultimo admin
-  do grupo e responde `409`.
-- `GET /groups/{groupId}/candidates` e a rota que admins de grupo devem usar
-  para listar usuarios elegiveis (ativos e fora do grupo); ela substitui o uso
-  de `GET /users` nesse fluxo.
-- `PATCH /users/{userId}` aceita `{ "name"?, "status"? }`. Desativar o proprio
-  usuario retorna `403`; desativar o ultimo superadmin ativo retorna `409`.
-
-## Eventos
-
-O WebSocket `GET /events` exige token no subprotocolo `bearer.<access-token>`,
-ecoado na resposta do handshake, e aceita somente Origins listadas em
-`CORS_ORIGINS` (ou loopback fora de producao). O servidor limita os frames a
-1 KiB, verifica atividade por ping/pong e transmite eventos com
-`eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` e
-`payload`. Eventos sao persistidos em `audit_events` antes da distribuicao.
-
-## Desenvolvimento local
-
-Inicie MariaDB, configure as variaveis `DB_*`, `OIDC_*` e
-`AUTH_REQUIRE_VERIFIED_EMAIL`, aplique as
-migrations e execute `go run ./cmd/server`. O guia do monorepo
-`mfe-communication` documenta a inicializacao coordenada dos MFEs e desta API.
+- Event delivery is best effort until a transactional outbox exists (ADR 0001).
+- Route authorization is applied per handler; a declarative route table with a test that walks it is still pending (ADR 0003).
+- Still to do: OpenAPI, uniform error catalog, pagination/search/idempotency, coverage thresholds, MariaDB integration tests in CI, security linters, and a hardened Docker image.
