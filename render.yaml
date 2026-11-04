@@ -6,6 +6,8 @@ services:
     startCommand: ./app
     healthCheckPath: /health
     envVars:
+      - key: APP_ENV
+        value: production
       - key: DB_HOST
         sync: false
       - key: DB_PORT
@@ -18,9 +20,15 @@ services:
         sync: false
       - key: DB_TLS
         value: "true"
+      - key: DB_TLS_SKIP_VERIFY
+        value: "false"
       - key: OIDC_ISSUER
         sync: false
       - key: OIDC_AUDIENCE
         value: authenticated
+      - key: AUTH_REQUIRE_VERIFIED_EMAIL
+        value: "true"
+      - key: BOOTSTRAP_SUPER_ADMIN_EMAIL
+        sync: false
       - key: CORS_ORIGINS
         sync: false

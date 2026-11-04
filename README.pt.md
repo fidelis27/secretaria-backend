@@ -57,8 +57,45 @@ cria `schema_migrations`, aplica os arquivos SQL em ordem e ignora versoes ja
 registradas. As migrations `004`, `006` e `007` foram mantidas apenas como
 historico de ambientes antigos e nao entram mais no caminho de producao; a
 migration `008` remove o usuario demo e a instituicao demo quando nao possuem
-vinculos. No Render, execute-o no Shell do servico depois de configurar as
-variaveis `DB_*`.
+vinculos. O processo `cmd/server` tambem aplica as migrations pendentes antes
+de abrir a API; no Render, configure o banco antes do primeiro deploy. O
+comando `go run ./cmd/migrate` continua disponivel para execucao manual e
+controlada.
+
+### Deploy no Render
+
+O blueprint [`render.yaml`](./render.yaml) define o servico Go e seus defaults
+de producao: `APP_ENV=production`, TLS do MariaDB com verificacao de
+certificado e verificacao obrigatoria do e-mail do token. O banco MariaDB de
+producao ja existente e externo ao Render; configure no servico os valores
+`DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASSWORD` correspondentes como variaveis
+nao sincronizadas. Este blueprint nao cria nem altera o banco. Nunca habilite
+`DB_TLS_SKIP_VERIFY` em producao.
+
+Antes de conectar o servico ao banco de producao:
+
+1. Confirme que as credenciais configuradas apontam para o banco correto e que
+   existe um backup recente e restauravel. O servidor aplica migrations
+   pendentes ao iniciar; revise as migrations antes de conectar a API. A conta
+   `DB_USER` tambem precisa das permissoes DDL exigidas, pois separar a
+   identidade de migration da conta de runtime ainda nao esta implementado.
+2. Configure `OIDC_ISSUER` para
+   `https://<project-ref>.supabase.co/auth/v1`, `CORS_ORIGINS` com as origens
+   HTTPS exatas do Host e `BOOTSTRAP_SUPER_ADMIN_EMAIL` com a conta inicial
+   administrada no Supabase.
+3. Confirme que o projeto Supabase emite o claim superior
+   `email_verified: true`; nao desative `AUTH_REQUIRE_VERIFIED_EMAIL` para
+   contornar uma configuracao incorreta do issuer.
+4. Aguarde o primeiro deploy aplicar as migrations e confirme `GET /health`
+   antes de apontar o Host para a API. O bootstrap so promove/cria o primeiro
+   superadmin quando ainda nao existe nenhum; remova
+   `BOOTSTRAP_SUPER_ADMIN_EMAIL` depois da inicializacao.
+5. Valide login, uma rota protegida, CORS e WebSocket pela URL HTTPS publica
+   antes de usar dados de demonstracao.
+
+Nao configure credenciais reais no blueprint ou em arquivos versionados. O
+Render nao fornece o banco MariaDB deste servico; disponibilidade, backup,
+restauracao, TLS e regra de rede do banco dependem do provedor externo.
 
 Seeds de desenvolvimento ficam em `seeds/dev` e devem ser aplicados com
 `go run ./cmd/seed` somente fora de producao (`APP_ENV != production`). O seed
