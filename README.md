@@ -54,7 +54,7 @@ Roles are superadmin, admin and member, scoped by institution and group. The rul
 
 Writes publish events with `eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` and `payload`.
 
-- Events are **persisted to `audit_events` in a transaction before** they are distributed.
+- Each event is saved to `audit_events` (with its institution scope, in one transaction) **before** it is broadcast. That save happens **after** the entity write has committed, in a separate transaction, so a failed save can lose the event (ADR 0001).
 - `GET /events` is a WebSocket. The token travels in the `bearer.<token>` subprotocol (echoed in the handshake), only allowed origins connect, frames are capped at 1 KiB, ping/pong detects dead connections, and connections close on graceful shutdown.
 - `GET /events/history` returns persisted events, scoped by institution.
 
@@ -95,6 +95,16 @@ Configuration is by environment variables (`DB_*`, `OIDC_ISSUER`, `OIDC_AUDIENCE
 - 87 test functions across domain, application, HTTP adapters, OIDC, config and migrations.
 - CI runs `go build`, `go vet` and `go test -race` on every PR.
 
+## Documentation
+
+| Doc | What it covers |
+| --- | --- |
+| [`docs/architecture.md`](docs/architecture.md) | Diagrams: layers, request pipeline, identity, authorization, event flow, data model, deployment |
+| [`docs/openapi.yaml`](docs/openapi.yaml) | API contract (OpenAPI 3.0) |
+| [`docs/adr/`](docs/adr) | Architecture decision records |
+| [`docs/security-and-quality-review.md`](docs/security-and-quality-review.md) | Security and quality findings with fixes |
+| [`README.pt.md`](README.pt.md) | Portuguese version with the configuration table |
+
 ## Architecture decisions
 
 | ADR | Decision |
@@ -107,4 +117,4 @@ Configuration is by environment variables (`DB_*`, `OIDC_ISSUER`, `OIDC_AUDIENCE
 
 - Event delivery is best effort until a transactional outbox exists (ADR 0001).
 - Route authorization is applied per handler; a declarative route table with a test that walks it is still pending (ADR 0003).
-- Still to do: OpenAPI, uniform error catalog, pagination/search/idempotency, coverage thresholds, MariaDB integration tests in CI, security linters, and a hardened Docker image.
+- Still to do: keep `docs/openapi.yaml` in sync automatically (it is hand-written today), uniform error catalog, pagination/search/idempotency, coverage thresholds, MariaDB integration tests in CI, security linters, and a hardened Docker image.

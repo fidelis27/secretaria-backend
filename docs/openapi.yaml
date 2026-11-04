@@ -1,0 +1,1000 @@
+openapi: 3.0.3
+info:
+  title: Secretaria Backend API
+  version: 0.1.0
+  description: |
+    HTTP and WebSocket API for the School Secretariat platform.
+
+    This file is hand-written from the routes registered in
+    `internal/adapters/httpserver/server.go` and the handlers next to it.
+    When a route changes, update this file in the same PR.
+
+    **Authentication.** Every route except `GET /health` requires a Supabase
+    access token (`Authorization: Bearer <jwt>`). The token is bound to a local
+    active user by `sub`. Unknown or inactive users get `403`; invalid tokens
+    get `401`.
+
+    **Scope.** Non-superadmin users only see data for institutions where they
+    belong to a group. Listings are filtered accordingly.
+
+    **Errors.** All errors use the body `{"error": "<message>"}`.
+
+    **Rate limit.** `POST`, `PATCH`, `DELETE` and `GET /events` are limited per
+    user (default 120 per minute). Exceeding it returns `429` with `Retry-After`.
+
+    **Correlation.** Send `x-correlation-id` on writes. It is copied into the
+    domain event published for that write; if absent, the backend generates one.
+servers:
+  - url: http://localhost:3333
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+  - name: Institutions
+  - name: Students
+  - name: Enrollments
+  - name: Users
+  - name: Groups
+  - name: Events
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness and database check
+      description: Public. Returns 503 when the database is unreachable.
+      security: []
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: Unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Request counters (superadmin only)
+      description: Prometheus text format with `http_requests_total`, `http_requests_5xx_total` and `http_requests_in_flight`.
+      responses:
+        "200":
+          description: Metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /institutions:
+    get:
+      tags: [Institutions]
+      summary: List visible institutions
+      responses:
+        "200":
+          description: Institutions the caller can see
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Institution"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+    post:
+      tags: [Institutions]
+      summary: Create an institution (superadmin only)
+      description: Does not publish a domain event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                cnpj:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Institution"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /students:
+    get:
+      tags: [Students]
+      summary: List visible students
+      responses:
+        "200":
+          description: Students in institutions the caller can see
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Student"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Students]
+      summary: Create a student
+      description: |
+        Requires edit rights on the institution (superadmin, or admin of a group
+        in that institution). Publishes `STUDENT_CREATED` on a best-effort basis
+        after the write (see ADR 0001).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, institutionId]
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                institutionId:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ForeignKeyViolation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /enrollments:
+    get:
+      tags: [Enrollments]
+      summary: List visible enrollments
+      responses:
+        "200":
+          description: Enrollments in institutions the caller can see
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Enrollment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Enrollments]
+      summary: Create an enrollment
+      description: Publishes `ENROLLMENT_CREATED` on a best-effort basis after the write.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentId, institutionId]
+              additionalProperties: false
+              properties:
+                studentId:
+                  type: string
+                institutionId:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ForeignKeyViolation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /students/{studentId}/enrollments/{enrollmentId}/transfer:
+    post:
+      tags: [Enrollments]
+      summary: Transfer a student to another institution
+      description: |
+        Closes the origin enrollment and opens the destination enrollment in a
+        single database transaction. The caller needs edit rights on **both**
+        institutions. Publishes `STUDENT_TRANSFERRED` (scoped to both).
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/EnrollmentId"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [institutionId]
+              additionalProperties: false
+              properties:
+                institutionId:
+                  type: string
+                  description: Destination institution
+      responses:
+        "201":
+          description: The new (destination) enrollment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Source enrollment is not active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /students/{studentId}/enrollments/{enrollmentId}/suspend:
+    post:
+      tags: [Enrollments]
+      summary: Suspend an enrollment
+      description: Publishes `ENROLLMENT_SUSPENDED`. History is preserved.
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/EnrollmentId"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, date]
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+                date:
+                  type: string
+                  format: date-time
+                  description: RFC 3339
+      responses:
+        "200":
+          description: Suspended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [suspended]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Enrollment is not active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /students/{studentId}/enrollments/{enrollmentId}/reopen:
+    post:
+      tags: [Enrollments]
+      summary: Reopen a suspended enrollment
+      description: Publishes `ENROLLMENT_REOPENED`.
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/EnrollmentId"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Reopened
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [active]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Enrollment is not suspended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /users:
+    get:
+      tags: [Users]
+      summary: List users (superadmin only)
+      responses:
+        "200":
+          description: All users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Users]
+      summary: Provision a local user (superadmin only)
+      description: |
+        Users must be provisioned locally before their first login (ADR 0002).
+        Does not publish a domain event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                superAdmin:
+                  type: boolean
+                  default: false
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /users/{userId}:
+    patch:
+      tags: [Users]
+      summary: Update a user's name or status (superadmin only)
+      description: |
+        Publishes `USER_UPDATED` with before and after values. A user cannot
+        deactivate themselves, and the last active superadmin cannot be deactivated.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                status:
+                  type: string
+                  enum: [active, inactive]
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Would leave no active superadmin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /groups:
+    get:
+      tags: [Groups]
+      summary: List visible groups
+      responses:
+        "200":
+          description: Groups in institutions the caller can see
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Group"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Groups]
+      summary: Create a group (superadmin only)
+      description: Does not publish a domain event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [institutionId, name]
+              additionalProperties: false
+              properties:
+                institutionId:
+                  type: string
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ForeignKeyViolation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /groups/{groupId}/members:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      tags: [Groups]
+      summary: List group members (group admin or superadmin)
+      responses:
+        "200":
+          description: Memberships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Membership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Groups]
+      summary: Add a member to a group (group admin or superadmin)
+      description: Does not publish a domain event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, role]
+              additionalProperties: false
+              properties:
+                userId:
+                  type: string
+                role:
+                  $ref: "#/components/schemas/Role"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /groups/{groupId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags: [Groups]
+      summary: Change a member's role
+      description: Publishes `GROUP_MEMBERSHIP_UPDATED`. The last admin of a group cannot be demoted.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              additionalProperties: false
+              properties:
+                role:
+                  $ref: "#/components/schemas/Role"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Would leave the group without an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Groups]
+      summary: Remove a member
+      description: Publishes `GROUP_MEMBERSHIP_REMOVED`. The last admin of a group cannot be removed.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "204":
+          description: Removed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Would leave the group without an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /groups/{groupId}/candidates:
+    parameters:
+      - $ref: "#/components/parameters/GroupId"
+    get:
+      tags: [Groups]
+      summary: List users that can still be added to the group
+      responses:
+        "200":
+          description: Candidate users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Candidate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /events:
+    get:
+      tags: [Events]
+      summary: Real-time domain events (WebSocket)
+      description: |
+        Upgrades to a WebSocket and streams one JSON `DomainEvent` per message.
+
+        - **Auth:** browsers cannot set headers on a WebSocket, so send the token
+          as the subprotocol `bearer.<jwt>`. The server echoes it in the handshake.
+        - **Origin:** only origins in `CORS_ORIGINS` (and loopback outside production) may connect.
+        - **Scope:** superadmins receive every event; others only events whose
+          `institutionIds` intersect their visible institutions. Events with no
+          institution scope reach superadmins only.
+        - **Frames:** client frames are capped at 1 KiB. The server pings periodically and drops silent connections.
+        - **Delivery:** best effort. Each connection has a small buffer; a slow
+          client can miss events. Use `GET /events/history` to catch up.
+      parameters:
+        - name: Sec-WebSocket-Protocol
+          in: header
+          required: true
+          schema:
+            type: string
+            example: bearer.eyJhbGciOi...
+      responses:
+        "101":
+          description: Switching protocols; messages follow as `DomainEvent`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainEvent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /events/history:
+    get:
+      tags: [Events]
+      summary: Persisted domain events, newest first
+      description: Scoped like the WebSocket stream.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+          description: Values outside 1 to 100 fall back to 30.
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainEvent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase access token (RS256 or ES256), verified through OIDC discovery and JWKS.
+  parameters:
+    CorrelationId:
+      name: x-correlation-id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Copied into the resulting domain event; generated when absent.
+    StudentId:
+      name: studentId
+      in: path
+      required: true
+      schema:
+        type: string
+    EnrollmentId:
+      name: enrollmentId
+      in: path
+      required: true
+      schema:
+        type: string
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid JSON body or failed validation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Unknown or inactive user, unverified e-mail, or not allowed by the authorization policy
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Duplicate entry
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ForeignKeyViolation:
+      description: Referenced resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    DatabaseUnavailable:
+      description: Database unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          description: Seconds to wait
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    HealthStatus:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+          example: database available
+    Role:
+      type: string
+      enum: [admin, member]
+    Institution:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        cnpj:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+    Student:
+      type: object
+      required: [id, name, institutionId, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        institutionId:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+    Enrollment:
+      type: object
+      required: [id, studentId, institutionId, status]
+      properties:
+        id:
+          type: string
+        studentId:
+          type: string
+        institutionId:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, transferred, suspended, closed]
+        suspensionReason:
+          type: string
+        suspendedAt:
+          type: string
+          format: date-time
+    User:
+      type: object
+      required: [id, name, email, status, superAdmin]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active, inactive]
+        superAdmin:
+          type: boolean
+    Group:
+      type: object
+      required: [id, institutionId, name]
+      properties:
+        id:
+          type: string
+        institutionId:
+          type: string
+        name:
+          type: string
+        institutionName:
+          type: string
+    Membership:
+      type: object
+      required: [userId, groupId, institutionId, role]
+      properties:
+        userId:
+          type: string
+        groupId:
+          type: string
+        institutionId:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        userName:
+          type: string
+        userEmail:
+          type: string
+    Candidate:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+    DomainEvent:
+      type: object
+      required: [eventId, type, version, source, correlationId, occurredAt, payload]
+      properties:
+        eventId:
+          type: string
+        type:
+          type: string
+          description: Types emitted today. The set may grow without a version change.
+          enum:
+            - STUDENT_CREATED
+            - ENROLLMENT_CREATED
+            - STUDENT_TRANSFERRED
+            - ENROLLMENT_SUSPENDED
+            - ENROLLMENT_REOPENED
+            - USER_UPDATED
+            - GROUP_MEMBERSHIP_UPDATED
+            - GROUP_MEMBERSHIP_REMOVED
+        version:
+          type: integer
+          example: 1
+        source:
+          type: string
+          enum: [backend.student, backend.enrollment, backend.user, backend.group]
+        correlationId:
+          type: string
+        institutionIds:
+          type: array
+          description: Institutions that may see this event. Omitted when empty.
+          items:
+            type: string
+        occurredAt:
+          type: string
+          format: date-time
+        payload:
+          description: |
+            Shape depends on `type`:
+            - `STUDENT_CREATED`: a Student
+            - `ENROLLMENT_CREATED`: an Enrollment
+            - `STUDENT_TRANSFERRED`: `{studentId, sourceEnrollment, destinationEnrollment, institutionId}`
+            - `ENROLLMENT_SUSPENDED`: `{studentId, enrollmentId, reason, date}`
+            - `ENROLLMENT_REOPENED`: `{studentId, enrollmentId}`
+            - `USER_UPDATED`, `GROUP_MEMBERSHIP_UPDATED`, `GROUP_MEMBERSHIP_REMOVED`: `{actorId, targetId, before, after}`
+          type: object
+          additionalProperties: true
