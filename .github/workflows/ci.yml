@@ -21,3 +21,10 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test -race ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build local backend image
+        run: docker build --build-arg GO_VERSION=1.26.6 --tag secretaria-backend:ci .

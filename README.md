@@ -8,7 +8,7 @@ A Portuguese version with the full configuration reference is in [`README.pt.md`
 
 ## Stack
 
-Go 1.26, MariaDB, Supabase Auth (OIDC/JWKS), WebSocket, GitHub Actions. About 6.9k lines of Go across 77 files, including tests.
+Go 1.26, MariaDB, Supabase Auth (OIDC/JWKS), WebSocket, GitHub Actions.
 
 ## Architecture
 
@@ -76,6 +76,37 @@ Writes publish events with `eventId`, `type`, `version`, `source`, `correlationI
 - Enrollment transfers close the origin enrollment and open the destination one inside a single database transaction, and keep the history.
 - Development seeds are separate from migrations and refuse to run when `APP_ENV=production`.
 
+## Running locally with Docker
+
+The Docker image and Compose stack are for local development only. Production
+continues to use Render's native Go build; `render.yaml` is unchanged.
+
+1. Copy `.env.example` to `.env` and set `OIDC_ISSUER` to the issuer URL of a
+   real Supabase project (`https://<project-ref>.supabase.co/auth/v1`). The
+   example database passwords are fake; replace them for your local setup.
+2. Start MariaDB, apply migrations, and run the API:
+
+   ```bash
+   docker compose up --build --detach api
+   ```
+
+3. Confirm the API and database are healthy:
+
+   ```bash
+   curl --fail http://localhost:3333/health
+   ```
+
+Optional development seed data can be loaded with
+`docker compose --profile seed run --rm seed`. The database is persisted in the
+named `mariadb_data` volume. Local CORS already permits loopback origins outside
+production, so `CORS_ORIGINS` need not be set for local frontends.
+
+To run the documented end-to-end smoke check on a machine with Docker and curl:
+
+```bash
+sh scripts/smoke-compose.sh
+```
+
 ## Running it
 
 ```bash
@@ -92,8 +123,8 @@ Configuration is by environment variables (`DB_*`, `OIDC_ISSUER`, `OIDC_AUDIENCE
 
 ## Quality
 
-- 87 test functions across domain, application, HTTP adapters, OIDC, config and migrations.
-- CI runs `go build`, `go vet` and `go test -race` on every PR.
+- Tests cover domain, application, HTTP adapters, OIDC, config and migrations.
+- CI runs `go build`, `go vet`, `go test -race` and a Docker image build on every PR.
 
 ## Documentation
 
@@ -112,9 +143,11 @@ Configuration is by environment variables (`DB_*`, `OIDC_ISSUER`, `OIDC_AUDIENCE
 | [0001](docs/adr/0001-eventos.md) | Event publication failures are logged and do not fail a write that already succeeded; a transactional outbox is the long-term fix |
 | [0002](docs/adr/0002-identidade.md) | Identity model |
 | [0003](docs/adr/0003-autorizacao.md) | Authorization by scope through domain policies |
+| [0004](docs/adr/0004-local-docker-image.md) | Local multi-stage Docker image using Alpine |
 
 ## Known limitations
 
 - Event delivery is best effort until a transactional outbox exists (ADR 0001).
 - Route authorization is applied per handler; a declarative route table with a test that walks it is still pending (ADR 0003).
-- Still to do: keep `docs/openapi.yaml` in sync automatically (it is hand-written today), uniform error catalog, pagination/search/idempotency, coverage thresholds, MariaDB integration tests in CI, security linters, and a hardened Docker image.
+- The local multi-stage Docker image now runs as a non-root user and has a `/health` check. Production image hardening, automated image vulnerability scanning, and a Docker Compose smoke run in CI remain pending.
+- Still to do: keep `docs/openapi.yaml` in sync automatically (it is hand-written today), uniform error catalog, pagination/search/idempotency, coverage thresholds, MariaDB integration tests in CI, and security linters.

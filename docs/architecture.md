@@ -300,6 +300,29 @@ flowchart LR
 
 Configuration is by environment variables (`DB_*`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, `CORS_ORIGINS`, `RATE_LIMIT_PER_MINUTE`, and others); see `README.pt.md` for the full table.
 
+### Local Docker Compose
+
+Compose runs MariaDB, the one-shot migration/bootstrap command, and the API.
+The optional seed service runs only with the `seed` profile.
+
+```mermaid
+flowchart LR
+    api["API container<br/>non-root, /health"] --> db[("MariaDB container")]
+    migration["migrate container<br/>one-shot"] --> db
+    seed["seed container<br/>optional profile"] --> db
+    volume[("mariadb_data volume")] --- db
+    api -- "OIDC discovery + JWKS" --> supa["Configured Supabase project"]
+    browser["Local frontend<br/>loopback origin"] -->|"HTTP :3333"| api
+```
+
+The containers share an isolated Compose network; only the API and database
+ports are published to loopback. `GET /health` checks database connectivity.
+The API uses `APP_ENV=development` and `DB_TLS=false`; loopback CORS is already
+allowed in non-production. Set `OIDC_ISSUER` to a real Supabase issuer before
+starting the API. This stack is local-only and does not change the Render
+deployment described above. See [ADR 0004](adr/0004-local-docker-image.md) for
+the image choice.
+
 ---
 
 ## 10. Known gaps
@@ -310,3 +333,5 @@ Configuration is by environment variables (`DB_*`, `OIDC_ISSUER`, `OIDC_AUDIENCE
 - **Some writes publish no event:** creating institutions, users and groups, and adding group members. There is also no route to update or inactivate an institution.
 - **Contract drift with the frontend.** The frontend declares `INSTITUTION_CREATED`, `INSTITUTION_UPDATED`, `INSTITUTION_INACTIVATED` and `STUDENT_UPDATED`, which this API never emits. The API emits `ENROLLMENT_CREATED`, `USER_UPDATED` and `GROUP_MEMBERSHIP_*`, which the frontend contract does not list. Align the two or remove the unused types.
 - **No pagination, search or idempotency keys** on list and write routes.
+- **The Docker image is local-development infrastructure only.** Production
+  image hardening and automated vulnerability scanning remain open.
