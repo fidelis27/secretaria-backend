@@ -159,7 +159,36 @@ ecoado na resposta do handshake, e aceita somente Origins listadas em
 
 ## Desenvolvimento local
 
+### Com Docker Compose
+
+A imagem Docker e o Compose sao somente para desenvolvimento local. A producao
+continua usando o build nativo Go do Render; o `render.yaml` nao foi alterado.
+
+1. Copie `.env.example` para `.env` e configure `OIDC_ISSUER` com a URL real do
+   emissor do Supabase (`https://<project-ref>.supabase.co/auth/v1`). As senhas
+   do banco no exemplo sao falsas; substitua-as para seu ambiente local.
+2. Inicie o MariaDB, aplique as migrations e suba a API:
+
+   ```bash
+   docker compose up --build --detach api
+   ```
+
+3. Confirme que a API e o banco estao saudaveis:
+
+   ```bash
+   curl --fail http://localhost:3333/health
+   ```
+
+Para carregar dados de desenvolvimento opcionalmente, execute
+`docker compose --profile seed run --rm seed`. Os dados do banco ficam no volume
+nomeado `mariadb_data`. Fora de producao, o backend ja permite origins de
+loopback, entao nao e necessario definir `CORS_ORIGINS` para frontends locais.
+O smoke test completo pode ser executado com `sh scripts/smoke-compose.sh` em
+um ambiente com Docker e curl.
+
+### Execucao sem Docker
+
 Inicie MariaDB, configure as variaveis `DB_*`, `OIDC_*` e
-`AUTH_REQUIRE_VERIFIED_EMAIL`, aplique as
-migrations e execute `go run ./cmd/server`. O guia do monorepo
-`mfe-communication` documenta a inicializacao coordenada dos MFEs e desta API.
+`AUTH_REQUIRE_VERIFIED_EMAIL`, aplique as migrations e execute
+`go run ./cmd/server`. O guia do monorepo `mfe-communication` documenta a
+inicializacao coordenada dos MFEs e desta API.
