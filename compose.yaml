@@ -1,0 +1,86 @@
+name: secretaria-backend
+
+x-backend-environment: &backend-environment
+  APP_ENV: development
+  PORT: "3333"
+  DB_HOST: db
+  DB_PORT: "3306"
+  DB_NAME: ${DB_NAME:-secretaria}
+  DB_USER: ${DB_USER:-secretaria}
+  DB_PASSWORD: ${DB_PASSWORD:-change-me-local}
+  DB_TLS: "false"
+  DB_TLS_SKIP_VERIFY: "false"
+  BOOTSTRAP_SUPER_ADMIN_EMAIL: ${BOOTSTRAP_SUPER_ADMIN_EMAIL:-}
+
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-secretaria}
+      MARIADB_USER: ${DB_USER:-secretaria}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-change-me-local}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change-me-root-local}
+    ports:
+      - "127.0.0.1:${DB_PUBLISHED_PORT:-3306}:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      args:
+        GO_VERSION: ${GO_VERSION:-1.26.6}
+    command: ["/app/migrate"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      args:
+        GO_VERSION: ${GO_VERSION:-1.26.6}
+    environment:
+      <<: *backend-environment
+      OIDC_ISSUER: ${OIDC_ISSUER:?Set OIDC_ISSUER to a real Supabase issuer in .env}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-authenticated}
+      AUTH_REQUIRE_VERIFIED_EMAIL: ${AUTH_REQUIRE_VERIFIED_EMAIL:-false}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    ports:
+      - "127.0.0.1:${HOST_PORT:-3333}:3333"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      args:
+        GO_VERSION: ${GO_VERSION:-1.26.6}
+    command: ["/app/seed"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+volumes:
+  mariadb_data:

@@ -1,0 +1,8 @@
+.git
+.github
+.env
+.env.*
+README*
+docs
+scripts
+*.md
