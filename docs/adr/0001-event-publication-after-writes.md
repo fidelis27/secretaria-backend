@@ -1,21 +1,21 @@
-# ADR 0001: Publicacao de eventos apos escritas
+# ADR 0001: Event publication after writes
 
 ## Status
 
-Aceita como alternativa temporaria ao outbox transacional.
+Accepted as a temporary alternative to a transactional outbox.
 
-## Decisao
+## Context
 
-Nas rotas de criacao de estudante, criacao de matricula e transferencia, suspensao e reabertura de matricula, uma falha ao persistir/publicar o evento e registrada no log, mas nao altera a resposta de sucesso da escrita concluida.
+Entities and events are currently persisted in separate operations. An outbox requires transactional repositories to coordinate entities, events, and scopes, as well as a dispatcher whose lifecycle is managed by the server; this change crosses the current domain and persistence interfaces.
 
-## Contexto
+## Decision
 
-Hoje as entidades e os eventos sao persistidos em operacoes separadas. A implementacao de outbox exige repositorios transacionais que coordenem entidades, eventos e escopos, alem de um dispatcher com ciclo de vida ligado ao servidor; essa mudanca atravessa as interfaces atuais de dominio e persistencia.
+For student creation, enrollment creation and transfer, enrollment suspension, and reopening, a failure to persist or publish the event is logged but does not change the successful response for the completed write.
 
-## Consequencias
+## Consequences
 
-- Uma falha de publicacao nao induz o cliente a repetir uma escrita que o backend ja confirmou.
-- O comportamento e melhor que responder `5xx` depois de uma escrita persistida, mas nao garante entrega eventual.
-- Se a persistencia do evento falhar, o evento pode ser perdido.
-- Se o cliente nao receber a resposta apesar de o servidor tê-la enviado, uma repeticao ainda pode duplicar a escrita; esta alternativa nao implementa idempotencia.
-- Um outbox transacional continua sendo a solucao necessaria para garantir entrega at-least-once.
+- A publication failure does not prompt the client to retry a write that the backend has already confirmed.
+- This is better than returning `5xx` after persisting a write, but it does not guarantee eventual delivery.
+- If event persistence fails, the event may be lost.
+- If the client does not receive the response even though the server sent it, a retry can still duplicate the write; this alternative does not provide idempotency.
+- A transactional outbox remains necessary to guarantee at-least-once delivery.
