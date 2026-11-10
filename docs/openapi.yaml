@@ -17,7 +17,11 @@ info:
     **Scope.** Non-superadmin users only see data for institutions where they
     belong to a group. Listings are filtered accordingly.
 
-    **Errors.** All errors use the body `{"error": "<message>"}`.
+    **Errors.** Application errors use the body `{"error": "<message>"}`.
+    Invalid WebSocket upgrade requests return `400` with a plain-text body.
+    Protected operations can return `424` when the database is unavailable and
+    `500` for unexpected internal failures; these shared responses are listed
+    for each operation.
 
     **Rate limit.** `POST`, `PATCH`, `DELETE` and `GET /events` are limited per
     user (default 120 per minute). Exceeding it returns `429` with `Retry-After`.
@@ -73,6 +77,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /institutions:
     get:
       tags: [Institutions]
@@ -92,6 +100,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "424":
           $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Institutions]
       summary: Create an institution (superadmin only)
@@ -126,6 +136,10 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /students:
     get:
       tags: [Students]
@@ -143,6 +157,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Students]
       summary: Create a student
@@ -184,6 +202,10 @@ paths:
           $ref: "#/components/responses/ForeignKeyViolation"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /enrollments:
     get:
       tags: [Enrollments]
@@ -201,6 +223,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Enrollments]
       summary: Create an enrollment
@@ -239,6 +265,10 @@ paths:
           $ref: "#/components/responses/ForeignKeyViolation"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /students/{studentId}/enrollments/{enrollmentId}/transfer:
     post:
       tags: [Enrollments]
@@ -286,6 +316,10 @@ paths:
                 $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /students/{studentId}/enrollments/{enrollmentId}/suspend:
     post:
       tags: [Enrollments]
@@ -337,6 +371,10 @@ paths:
                 $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /students/{studentId}/enrollments/{enrollmentId}/reopen:
     post:
       tags: [Enrollments]
@@ -373,6 +411,10 @@ paths:
                 $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /users:
     get:
       tags: [Users]
@@ -390,6 +432,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Users]
       summary: Provision a local user (superadmin only)
@@ -430,6 +476,10 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /users/{userId}:
     patch:
       tags: [Users]
@@ -480,6 +530,10 @@ paths:
                 $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /groups:
     get:
       tags: [Groups]
@@ -497,6 +551,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Groups]
       summary: Create a group (superadmin only)
@@ -533,6 +591,10 @@ paths:
           $ref: "#/components/responses/ForeignKeyViolation"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /groups/{groupId}/members:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -554,6 +616,10 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Groups]
       summary: Add a member to a group (group admin or superadmin)
@@ -590,6 +656,12 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "422":
+          $ref: "#/components/responses/ForeignKeyViolation"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /groups/{groupId}/members/{userId}:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -638,6 +710,10 @@ paths:
                 $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [Groups]
       summary: Remove a member
@@ -663,6 +739,10 @@ paths:
                 $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /groups/{groupId}/candidates:
     parameters:
       - $ref: "#/components/parameters/GroupId"
@@ -686,6 +766,10 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /events:
     get:
       tags: [Events]
@@ -722,6 +806,16 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "400":
+          description: Invalid WebSocket upgrade request
+          content:
+            text/plain:
+              schema:
+                type: string
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /events/history:
     get:
       tags: [Events]
@@ -749,6 +843,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "424":
+          $ref: "#/components/responses/DatabaseUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 components:
   securitySchemes:
     bearerAuth:
@@ -821,6 +919,12 @@ components:
             $ref: "#/components/schemas/Error"
     DatabaseUnavailable:
       description: Database unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalServerError:
+      description: Unexpected internal error
       content:
         application/json:
           schema:

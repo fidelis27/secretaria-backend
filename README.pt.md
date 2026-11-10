@@ -56,7 +56,7 @@ Todos os endpoints registrados, exceto `GET /health`, exigem um access token Sup
 
 ## Autorização
 
-Os papéis são definidos por escopo de instituição e turma. [A política de domínio](internal/domain/authorization/policy.go) define as regras, e os handlers HTTP as aplicam antes das operações. Um `super_admin` exige tanto a entrada em `app_metadata.roles` do Supabase quanto a flag local de superadmin. Administradores de turma não podem remover nem rebaixar o último administrador da turma; a API responde `409`. Listagens com escopo de instituição são filtradas pelas instituições visíveis ao solicitante. Consulte a [ADR 0003](docs/adr/0003-autorizacao.md).
+Os papéis são definidos por escopo de instituição e turma. [A política de domínio](internal/domain/authorization/policy.go) define as regras, e os handlers HTTP as aplicam antes das operações. Um `super_admin` exige tanto a entrada em `app_metadata.roles` do Supabase quanto a flag local de superadmin. Administradores de turma não podem remover nem rebaixar o último administrador da turma; a API responde `409`. Listagens com escopo de instituição são filtradas pelas instituições visíveis ao solicitante. Consulte a [ADR 0003](docs/adr/0003-scope-authorization-and-domain-policy.md).
 
 ## Rotas públicas
 
@@ -68,7 +68,7 @@ O middleware CORS também responde `204` a requisições de preflight `OPTIONS` 
 
 As escritas publicam eventos com `eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` e `payload`.
 
-- Cada evento é salvo em `audit_events`, com seu escopo institucional, antes de ser transmitido. A persistência ocorre depois do commit da escrita da entidade, em uma transação separada; portanto, uma falha ao salvar o evento pode fazer com que ele se perca (consulte a [ADR 0001](docs/adr/0001-eventos.md)).
+- Cada evento é salvo em `audit_events`, com seu escopo institucional, antes de ser transmitido. A persistência ocorre depois do commit da escrita da entidade, em uma transação separada; portanto, uma falha ao salvar o evento pode fazer com que ele se perca (consulte a [ADR 0001](docs/adr/0001-event-publication-after-writes.md)).
 - `GET /events` é um WebSocket. O token vai no subprotocolo `bearer.<access-token>`, que é repetido no handshake. O servidor verifica a Origin do WebSocket, limita os frames a 1 KiB, usa ping/pong para detectar conexões inativas e encerra as conexões durante o desligamento gracioso.
 - `GET /events/history` retorna eventos persistidos com escopo por instituição.
 
@@ -141,9 +141,9 @@ Os testes cobrem domínio, aplicação, adaptadores HTTP, OIDC, configuração e
 
 | ADR | Decisão |
 | --- | --- |
-| [0001](docs/adr/0001-eventos.md) | Falhas de publicação de eventos não alteram uma escrita que já teve sucesso; um outbox transacional continua sendo a solução de longo prazo |
-| [0002](docs/adr/0002-identidade.md) | Modelo de identidade |
-| [0003](docs/adr/0003-autorizacao.md) | Autorização por escopo por meio de políticas de domínio |
+| [0001](docs/adr/0001-event-publication-after-writes.md) | Falhas de publicação de eventos não alteram uma escrita que já teve sucesso; um outbox transacional continua sendo a solução de longo prazo |
+| [0002](docs/adr/0002-external-identity-bound-by-subject.md) | Modelo de identidade |
+| [0003](docs/adr/0003-scope-authorization-and-domain-policy.md) | Autorização por escopo por meio de políticas de domínio |
 | [0004](docs/adr/0004-local-docker-image.md) | Imagem Docker local multi-stage |
 
 ## Limitações conhecidas

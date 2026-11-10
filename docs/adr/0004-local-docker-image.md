@@ -1,36 +1,28 @@
-# ADR 0004: imagem Docker local em Alpine
+# ADR 0004: Local Docker image on Alpine
 
-- Status: aceita
-- Data: 2026-11-05
+## Status
 
-## Contexto
+Accepted.
 
-O backend precisa de um ambiente local reproduzivel com MariaDB, migrations e
-API. O deploy de producao continua usando o build nativo do Render e nao deve
-ser alterado por esta decisao.
+## Decision date
 
-## Decisao
+2026-11-05.
 
-Usar uma imagem multi-stage: compilar os binarios Go com `CGO_ENABLED=0` em
-`golang:<versao>-alpine` e executa-los em `alpine:3.22`. A imagem runtime instala
-certificados CA para chamadas OIDC/JWKS e executa como usuario nao-root. O
-`wget` do BusyBox verifica `GET /health`, que tambem verifica a conexao com o
-banco. A imagem inclui os comandos `server`, `migrate` e `seed`; o Compose usa
-`seed` apenas sob perfil opcional.
+## Context
 
-## Alternativas consideradas
+The backend needs a reproducible local environment with MariaDB, migrations, and the API. Production deployment continues to use Render's native Go build and must not be changed by this decision.
 
-- Distroless: descartada porque nao inclui shell nem `wget`; implementar o
-  healthcheck dentro de um binario exigiria codigo de aplicacao desnecessario.
-- Uma unica imagem Go com ferramentas de build em runtime: descartada por
-  aumentar a superficie da imagem.
+## Decision
 
-## Consequencias
+Use a multi-stage image: compile Go binaries with `CGO_ENABLED=0` in `golang:<version>-alpine` and run them in `alpine:3.22`. The runtime image installs CA certificates for OIDC/JWKS requests and runs as a non-root user. BusyBox `wget` checks `GET /health`, which also checks the database connection. The image includes the `server`, `migrate`, and `seed` commands; Compose uses `seed` only under its optional profile.
 
-- A stack Docker destina-se somente ao desenvolvimento local; nao muda o
-  `render.yaml` nem define a imagem de producao.
-- A imagem e menor que o estagio de build, mas Alpine ainda contem utilitarios
-  de runtime. A atualizacao da imagem base e a validacao de vulnerabilidades
-  continuam sendo responsabilidades pendentes.
-- O smoke test Compose precisa ser executado em um ambiente com Docker
-  instalado antes de afirmar compatibilidade da stack.
+## Alternatives considered
+
+- **Distroless:** rejected because it has no shell or `wget`; implementing the health check inside a binary would add unnecessary application code.
+- **A single Go image with build tools at runtime:** rejected because it would increase the image attack surface.
+
+## Consequences
+
+- The Docker stack is for local development only; it does not change `render.yaml` or define the production image.
+- The image is smaller than the build stage, but Alpine still contains runtime utilities. Updating the base image and checking for vulnerabilities remain outstanding responsibilities.
+- The Compose smoke test must run in an environment with Docker installed before compatibility of the stack is claimed.

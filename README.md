@@ -56,7 +56,7 @@ Every registered API endpoint except `GET /health` requires a Supabase access to
 
 ## Authorization
 
-Roles are scoped by institution and group. [The domain policy](internal/domain/authorization/policy.go) defines the rules, and HTTP handlers apply them before operations. A `super_admin` requires both the Supabase `app_metadata.roles` entry and the local superadmin flag. Group admins cannot remove or demote the last admin of a group; the API responds with `409`. Institution-scoped listings are filtered to the caller's visible institutions. See [ADR 0003](docs/adr/0003-autorizacao.md).
+Roles are scoped by institution and group. [The domain policy](internal/domain/authorization/policy.go) defines the rules, and HTTP handlers apply them before operations. A `super_admin` requires both the Supabase `app_metadata.roles` entry and the local superadmin flag. Group admins cannot remove or demote the last admin of a group; the API responds with `409`. Institution-scoped listings are filtered to the caller's visible institutions. See [ADR 0003](docs/adr/0003-scope-authorization-and-domain-policy.md).
 
 ## Public routes
 
@@ -68,7 +68,7 @@ The CORS middleware also answers `OPTIONS` preflight requests with `204` before 
 
 Writes publish events with `eventId`, `type`, `version`, `source`, `correlationId`, `occurredAt` and `payload`.
 
-- Each event is saved to `audit_events` with its institution scope before it is broadcast. Persistence happens after the entity write commits, in a separate transaction, so a failed event save can lose the event (see [ADR 0001](docs/adr/0001-eventos.md)).
+- Each event is saved to `audit_events` with its institution scope before it is broadcast. Persistence happens after the entity write commits, in a separate transaction, so a failed event save can lose the event (see [ADR 0001](docs/adr/0001-event-publication-after-writes.md)).
 - `GET /events` is a WebSocket. The token travels in the `bearer.<access-token>` subprotocol, which is echoed in the handshake. The server checks the WebSocket Origin, limits frames to 1 KiB, uses ping/pong to detect dead connections, and closes connections during graceful shutdown.
 - `GET /events/history` returns persisted events scoped by institution.
 
@@ -141,9 +141,9 @@ Tests cover domain, application, HTTP adapters, OIDC, configuration and migratio
 
 | ADR | Decision |
 | --- | --- |
-| [0001](docs/adr/0001-eventos.md) | Event publication failures do not fail a write that has already succeeded; a transactional outbox remains the long-term solution |
-| [0002](docs/adr/0002-identidade.md) | Identity model |
-| [0003](docs/adr/0003-autorizacao.md) | Authorization by scope through domain policies |
+| [0001](docs/adr/0001-event-publication-after-writes.md) | Event publication failures do not fail a write that has already succeeded; a transactional outbox remains the long-term solution |
+| [0002](docs/adr/0002-external-identity-bound-by-subject.md) | Identity model |
+| [0003](docs/adr/0003-scope-authorization-and-domain-policy.md) | Authorization by scope through domain policies |
 | [0004](docs/adr/0004-local-docker-image.md) | Local multi-stage Docker image |
 
 ## Known limitations
